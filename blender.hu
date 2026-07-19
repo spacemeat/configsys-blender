@@ -1,0 +1,27 @@
+{
+    // Override base configsys's native `blender` with a from-source build (editor + a matching
+    // `bpy` module), wherever this plugin is loaded. Everything wavy lives in build-blender.sh;
+    // this just parameterizes it. `ref` pins the version to match your editor.
+    //
+    // CPU-only by default: the binding below requires nothing beyond the recipe's own build deps.
+    // To render on a GPU, give the binding a `gpu:` list AND name the matching SDK component(s) in
+    // `requires:` on the SAME binding — the driver maps the tokens to Cycles CMake flags and
+    // refuses to build if a toolchain is missing. Because the SDK is a `requires:` on the GPU
+    // binding only, a casual CPU build never drags in something heavy like CUDA. Token table +
+    // knobs are in README.md; the SDK components themselves live in gpu-sdks.hu.
+    components: {
+        blender: {
+            install: [
+                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }
+
+                // GPU example — replace the CPU binding above with a variant like this:
+                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
+                //   gpu: [ cuda, optix ]  requires: [ cuda-toolkit ] }        // NVIDIA (or gpu: [ nvidia ])
+                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
+                //   gpu: [ hip ]  requires: [ rocm-hip ] }                     // AMD
+                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
+                //   gpu: [ oneapi ]  requires: [ intel-oneapi-basekit ] }      // Intel
+            ]
+        }
+    }
+}

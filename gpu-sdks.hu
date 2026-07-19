@@ -1,0 +1,21 @@
+{
+    // GPU compute toolchains Blender's Cycles backends build against. Ordinary configsys
+    // components: pulled in ONLY when a blender binding's `requires:` names one (which happens
+    // only when you opt into that gpu: backend), so a CPU build never touches them.
+    //
+    // These package names are a FIRST PASS — the distro-repo packages, which lag and are often
+    // partial. Real setups (NVIDIA's cuda-toolkit repo, AMD ROCm, Intel oneAPI apt/dnf repos)
+    // need their own repo wiring; see docs/PLAN.md. `cuda-toolkit` is the candidate to promote
+    // into base configsys as a general-purpose component (used well beyond Blender).
+    components: {
+        cuda-toolkit: {
+            install: [ { via: native  name: { apt: nvidia-cuda-toolkit  dnf: cuda  pacman: cuda } } ]
+        }
+        rocm-hip: {
+            install: [ { via: native  name: { apt: rocm-hip-sdk  dnf: rocm-hip  pacman: rocm-hip-sdk } } ]
+        }
+        intel-oneapi-basekit: {
+            install: [ { via: native  name: { apt: intel-basekit  dnf: intel-basekit  pacman: intel-oneapi-basekit } } ]
+        }
+    }
+}

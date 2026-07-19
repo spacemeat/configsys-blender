@@ -1,0 +1,13 @@
+{
+    // configsys-blender — a code plugin that builds Blender (editor + the `bpy` Python module)
+    // from source, so `import bpy` matches the editor. Overrides base configsys's native
+    // `blender` wherever this plugin is loaded + trusted.
+    name: configsys-blender
+    version: 0.1.0
+    requires-abi: 1
+
+    provides: { drivers: [ blender-build ] }
+
+    code: blender.py       // the orchestration driver (needs `plugin trust`, since it runs code)
+    data: [ blender.hu  gpu-sdks.hu ]   // the `blender` override + the GPU SDK components
+}
