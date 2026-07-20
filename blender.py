@@ -144,6 +144,30 @@ class BlenderBuild(Driver):
     def uninstall(self, rc):
         return Result(f'(blender-build: leaving {self._build_dir(rc)} in place; remove it by hand)', 0)
 
+    def reconcile_scope(self, rc, detected, target):
+        # MOVE the build tree between ~/blender-git and /opt/blender-git — never rebuild (the base
+        # reinstall would recompile for ~40 min). The bpy wheel is pip --user (scope-agnostic), so
+        # nothing else to touch. sudo when either side is /opt; chown back to the user on ->user.
+        d = rc.fields.get('dir') or 'blender-git'
+        had, saved = 'scope' in rc.fields, rc.fields.get('scope')
+        try:
+            rc.fields['scope'] = detected
+            old = self._build_dir(rc)
+            rc.fields['scope'] = target
+            new = self._build_dir(rc)
+        finally:
+            if had:
+                rc.fields['scope'] = saved
+            else:
+                rc.fields.pop('scope', None)
+        if old == new:
+            return Result('(blender-build: already at the declared scope)', 0)
+        tail = f' && chown -R "$USER" {shlex.quote(str(new))}' if (target == 'user' and detected == 'system') else ''
+        return self.runner.run(
+            f'mkdir -p {shlex.quote(str(new.parent))} && mv {shlex.quote(str(old))} '
+            f'{shlex.quote(str(new))}{tail}',
+            sudo='system' in (detected, target), capture=False)
+
     def lock(self, rc):
         return Result('(blender-build lock recorded in ledger)', 0)
 
