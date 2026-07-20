@@ -9,5 +9,5 @@
     provides: { drivers: [ blender-build ] }
 
     code: blender.py       // the orchestration driver (needs `plugin trust`, since it runs code)
-    data: [ blender.hu  gpu-sdks.hu ]   // the `blender` override + the GPU SDK components
+    data: [ blender.hu ]   // the `blender` override (GPU SDK components now live in base routes.hu)
 }

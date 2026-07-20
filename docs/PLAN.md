@@ -31,7 +31,8 @@ component override.
     a heavyweight toolkit. The `gpu:`/`requires:` pair is two hand-kept lists; the driver's
     PATH validation catches a desync, so it's acceptable (decided: keep two lists).
   - SDK toolchains (`cuda-toolkit`, `rocm-hip`, `intel-oneapi-basekit`) are modeled as ordinary
-    components in the plugin (`gpu-sdks.hu`).
+    components in **base configsys** (`routes.hu`) — promoted out of this plugin since they're
+    general-purpose.
 
 ## Open / defaults (proposed — override freely)
 
@@ -43,12 +44,10 @@ component override.
 
 ## Parked (revisit)
 
-- **Promote `cuda-toolkit` to base configsys.** It's a general-purpose component (used well beyond
-  Blender); it starts in this plugin (`gpu-sdks.hu`) and should graduate to base once its binding
-  is solid. Move the component definition, drop it from the plugin.
-- **Real SDK repo wiring.** The `gpu-sdks.hu` bindings use distro-repo package names (first pass,
-  often lagging/partial). NVIDIA's `cuda-toolkit` repo, AMD ROCm, and Intel oneAPI apt/dnf repos
-  each need their own repo setup + versioned packages before these are production-grade.
+- **Real SDK repo wiring.** The base `cuda-toolkit`/`rocm-hip`/`intel-oneapi-basekit` bindings use
+  distro-repo package names (first pass, often lagging/partial). NVIDIA's `cuda-toolkit` repo, AMD
+  ROCm, and Intel oneAPI apt/dnf repos each need their own repo setup + versioned packages before
+  these are production-grade. (DONE: the components themselves are promoted to base routes.hu.)
 - **GPU hardware detection (advisory only).** A helper that sniffs installed vendors
   (`lspci`/`nvidia-smi`/`/sys/class/drm`) and *suggests* a `gpu:` set + SDK component — never
   auto-populates the field (that would surprise, and would break build-here/deploy-there render

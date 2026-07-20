@@ -8,7 +8,7 @@
     // `requires:` on the SAME binding — the driver maps the tokens to Cycles CMake flags and
     // refuses to build if a toolchain is missing. Because the SDK is a `requires:` on the GPU
     // binding only, a casual CPU build never drags in something heavy like CUDA. Token table +
-    // knobs are in README.md; the SDK components themselves live in gpu-sdks.hu.
+    // knobs are in README.md; the SDK components (cuda-toolkit, ...) now live in base routes.hu.
     components: {
         blender: {
             install: [

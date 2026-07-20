@@ -7,7 +7,9 @@ overrides base configsys's native `blender` wherever this plugin is loaded and t
 - `blender.py` — the `blender-build` driver (orchestration + `gpu:`→CMake mapping + validation).
 - `build-blender.sh` — the build recipe (edit the knobs: compiler, bpy install target).
 - `blender.hu` — the `blender` component override.
-- `gpu-sdks.hu` — the GPU SDK components a `gpu:` build depends on.
+
+The GPU SDK components a `gpu:` build depends on (`cuda-toolkit`, `rocm-hip`,
+`intel-oneapi-basekit`) live in **base configsys** (`routes.hu`), not this plugin.
 
 Because it ships code, it needs a one-time `configsys plugin trust configsys-blender`.
 See `docs/PLAN.md` for the decisions and the parked work.
