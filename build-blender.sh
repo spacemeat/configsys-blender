@@ -56,18 +56,14 @@ cd "$SRC"
 #    build_files/build_environment/ as of 4.x — adjust if a future Blender moves it.
 ./build_files/build_environment/install_linux_packages.py
 
-# 2b. Blender 4.x builds a Vulkan backend, and its cmake needs the SYSTEM Vulkan loader dev
-#     (vulkan.pc via pkg-config) — but Blender's installer files that under its "provided by
-#     precompiled libs" set, which the default (basics) run above does NOT install. So a machine
-#     without graphics-dev packages fails cmake with "No package 'vulkan' found". Install it.
-if   command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y libvulkan-dev
-elif command -v dnf     >/dev/null 2>&1; then sudo dnf install -y vulkan-loader-devel
-elif command -v pacman  >/dev/null 2>&1; then sudo pacman -S --needed --noconfirm vulkan-icd-loader vulkan-headers
-elif command -v zypper  >/dev/null 2>&1; then sudo zypper install -y vulkan-devel
-fi
-
-# 3. precompiled libraries + latest add-ons
-make update
+# 3. Precompiled libraries (a git-lfs submodule under lib/) + submodules + add-ons. CRUCIAL on
+#    Linux: these precompiled libs are OPT-IN — plain `make update` leaves lib/<platform> EMPTY,
+#    which makes cmake fall back to SYSTEM vulkan/shaderc/... (a dead end on distros that don't
+#    package all of them as dev libs, e.g. Ubuntu 22.04 has no libshaderc-dev). Fetch them with
+#    --use-linux-libraries (several GB via git-lfs) so the build is self-contained and immune to
+#    old distro libs — the whole point of Blender's precompiled deps. Run the updater directly so
+#    the flag reaches it (the `make update` wrapper doesn't forward it).
+python3 ./build_files/utils/make_update.py --use-linux-libraries
 
 # 4. build the requested target(s)
 if [ "$TARGET" = editor ] || [ "$TARGET" = both ]; then
