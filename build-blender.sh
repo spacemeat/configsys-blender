@@ -27,6 +27,24 @@ BPY_PIP="python3 -m pip install --user --force-reinstall"
 GPU_CMAKE="${GPU_CMAKE:-}"   # empty = CPU-only
 # ---------------------------------------------------------------------------
 
+# Blender's bundled libs (nanovdb/openvdb, ...) don't compile with a very new GCC — GCC >= 14
+# rejects nanovdb's template bodies (-Wtemplate-body). Blender 4.3's reference compiler is GCC 11.
+# So if no compiler is forced and the DEFAULT g++ is >= 14 (e.g. a machine whose update-alternatives
+# points cc/g++ at gcc-15), fall back to the newest installed g++ <= 13. Override via CC/CXX_OVERRIDE.
+if [ -z "$CXX_OVERRIDE" ] && command -v g++ >/dev/null 2>&1; then
+    _gv=$(g++ -dumpversion 2>/dev/null | cut -d. -f1)
+    if [ "${_gv:-0}" -ge 14 ] 2>/dev/null; then
+        for _v in 13 12 11; do
+            if command -v "g++-$_v" >/dev/null 2>&1 && command -v "gcc-$_v" >/dev/null 2>&1; then
+                CC_OVERRIDE="gcc-$_v"; CXX_OVERRIDE="g++-$_v"
+                echo "build-blender: default g++ is $_gv (too new for Blender's bundled libs) — using g++-$_v"
+                break
+            fi
+        done
+        [ -z "$CXX_OVERRIDE" ] && echo "build-blender: WARNING default g++ is $_gv and no g++<=13 found; build may fail on bundled libs" >&2
+    fi
+fi
+
 CC_ENV=()
 [ -n "$CC_OVERRIDE" ]  && CC_ENV+=("CC=$CC_OVERRIDE")
 [ -n "$CXX_OVERRIDE" ] && CC_ENV+=("CXX=$CXX_OVERRIDE")
