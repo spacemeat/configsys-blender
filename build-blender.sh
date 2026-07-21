@@ -52,8 +52,9 @@ fi
 cd "$SRC"
 [ -n "$REF" ] && git checkout "$REF"
 
-# 2. build dependencies (Blender's own distro-aware installer; it sudos where needed)
-./build_files/linux/install_linux_packages.py
+# 2. build dependencies (Blender's own distro-aware installer; it self-sudos). Path is
+#    build_files/build_environment/ as of 4.x — adjust if a future Blender moves it.
+./build_files/build_environment/install_linux_packages.py
 
 # 3. precompiled libraries + latest add-ons
 make update
