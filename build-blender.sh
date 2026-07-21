@@ -39,7 +39,13 @@ elif command -v zypper  >/dev/null 2>&1; then sudo zypper install -y python3 git
 else echo "build-blender: unknown package manager — install python3/git/git-lfs yourself" >&2; fi
 
 # 1. sources
-mkdir -p "$ROOT"
+# Create the build root. At user scope $ROOT is under ~ (writable directly). At system scope it's
+# /opt/... — a normal user can't mkdir there, so fall back to sudo + hand ownership back, and the
+# rest of the build runs unprivileged in place (world-readable under /opt — an admin can build
+# Blender for all users, no root compile).
+if ! mkdir -p "$ROOT" 2>/dev/null; then
+    sudo mkdir -p "$ROOT" && sudo chown "$(id -un):$(id -gn)" "$ROOT"
+fi
 if [ ! -d "$SRC/.git" ]; then
     git clone https://projects.blender.org/blender/blender.git "$SRC"
 fi
