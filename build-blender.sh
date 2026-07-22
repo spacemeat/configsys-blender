@@ -74,6 +74,25 @@ case " $GPU_CMAKE " in
                 _v=$((_v - 1))
             done
         fi
+
+        # Build kernels only for THIS machine's GPU arch(es). Blender's default spans a dozen
+        # arches (sm_30 … sm_89), some newer than an older toolkit supports (CUDA 11.5 has no
+        # sm_89 → "not defined for option gpu-architecture"), and a personal build needs only its
+        # own GPU — one quick kernel, not twelve. Detect via nvidia-smi's compute_cap; override
+        # with CYCLES_CUDA_ARCH (e.g. "sm_75;sm_86") for a portable multi-GPU binary.
+        if [ -n "${CYCLES_CUDA_ARCH:-}" ]; then
+            GPU_CMAKE="$GPU_CMAKE -D CYCLES_CUDA_BINARIES_ARCH=$CYCLES_CUDA_ARCH"
+            echo "build-blender: CUDA kernel arch(es) from CYCLES_CUDA_ARCH: $CYCLES_CUDA_ARCH"
+        elif command -v nvidia-smi >/dev/null 2>&1; then
+            _arch=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null \
+                    | sed 's/\.//; s/^/sm_/' | sort -u | paste -sd';')
+            if [ -n "$_arch" ]; then
+                GPU_CMAKE="$GPU_CMAKE -D CYCLES_CUDA_BINARIES_ARCH=$_arch"
+                echo "build-blender: building kernels for this machine's GPU(s): $_arch"
+            else
+                echo "build-blender: could not detect a GPU arch — Blender's full arch list may exceed your CUDA toolkit; set CYCLES_CUDA_ARCH" >&2
+            fi
+        fi
     ;;
 esac
 
