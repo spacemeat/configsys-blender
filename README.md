@@ -58,7 +58,7 @@ Example NVIDIA binding:
 blender: { install: [
     { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
       gpu: [ cuda, optix ]  requires: [ cuda-toolkit ]
-      optix-root: ~/optix/NVIDIA-OptiX-SDK-9.0.0 }
+      optix-root: ~/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64  optix-max-version: 8 }
 ] }
 ```
 
