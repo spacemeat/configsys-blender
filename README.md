@@ -49,8 +49,7 @@ headers are **EULA-gated and can't be auto-fetched**. Download the SDK once from
 [developer.nvidia.com](https://developer.nvidia.com/designworks/optix/download) (accept its EULA),
 unpack it, and set **`optix-root:`** to that directory on the binding. The driver validates
 `<optix-root>/include/optix.h` exists and passes `OPTIX_ROOT_DIR` to cmake — a missing/unset
-`optix-root` fails fast with guidance, not a raw cmake error. The OptiX *runtime* ships with the
-NVIDIA driver (`libnvoptix`), so there's nothing else to install. (No `optix-root` needed for a
+`optix-root` fails fast with guidance, not a raw cmake error.  The OptiX version must match your Blender `ref`'s era (Blender 4.3 → OptiX **8.x**; OptiX 9's coop-vector headers don't compile against 4.3). Set **`optix-max-version:`** (a major int) and the driver prints the SDK version and *warns before the build* if it's newer — overridable, never fatal. The OptiX *runtime* ships with the NVIDIA driver (`libnvoptix`), so there's nothing else to install. (No `optix-root` needed for a
 CUDA-only build — drop `optix` from `gpu:`.)
 
 Example NVIDIA binding:

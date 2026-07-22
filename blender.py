@@ -120,7 +120,42 @@ class BlenderBuild(Driver):
         if not self.runner.run(f'test -e {shlex.quote(str(header))}').ok:
             return None, (f"optix-root {root_p} has no include/optix.h — point it at an unpacked "
                           f"NVIDIA OptiX SDK directory")
-        return f'-D OPTIX_ROOT_DIR={root_p}', None
+        # Version heads-up. OptiX must match the Blender build's era (Blender 4.3 -> OptiX 8.x;
+        # OptiX 9's coop-vec headers reference `half` and don't compile against 4.3). We can't know
+        # the compatible range generically, so the binding declares its ceiling via
+        # `optix-max-version:` (a major int) — warn (never block) if the SDK is newer, so you catch
+        # it BEFORE a long build instead of at 59%. Raise/remove it for a combo you know works.
+        ver = self._optix_version(header)
+        if ver:
+            print(f'blender-build: OptiX SDK {".".join(map(str, ver))} at {root_p}')
+            mx = rc.fields.get('optix-max-version')
+            try:
+                if mx is not None and ver[0] > int(str(mx)):
+                    print(f"blender-build: WARNING OptiX {ver[0]}.x is newer than optix-max-version "
+                          f"({mx}) declared for this Blender build — it may fail to compile (e.g. "
+                          f"OptiX 9's coop-vec headers on Blender 4.3). Use a <= {mx}.x SDK, or "
+                          f"raise optix-max-version if you know this combo builds.")
+            except (TypeError, ValueError):
+                pass
+        # Force OPTIX_INCLUDE_DIR alongside OPTIX_ROOT_DIR. Blender's FindOptiX caches the include
+        # dir via find_path, which is a no-op once cached — so a changed optix-root would NOT
+        # re-search and the build would keep the old SDK's headers. A command-line -D overrides
+        # the cache, so an SDK swap takes effect on the next configure.
+        inc = root_p / 'include'
+        return f'-D OPTIX_ROOT_DIR={root_p} -D OPTIX_INCLUDE_DIR={inc}', None
+
+    @staticmethod
+    def _optix_version(header):
+        '''(major, minor, patch) from optix.h's `#define OPTIX_VERSION` (90100 -> (9, 1, 0)),
+        or None if unreadable. Best-effort — a real header path exists here even under --pretend.'''
+        try:
+            for line in Path(header).read_text(encoding='utf-8', errors='ignore').splitlines():
+                if line.startswith('#define OPTIX_VERSION'):
+                    n = int(line.split()[2])
+                    return (n // 10000, (n % 10000) // 100, n % 100)
+        except (OSError, ValueError, IndexError):
+            pass
+        return None
 
     # -- read -------------------------------------------------------------
 

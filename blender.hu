@@ -19,7 +19,8 @@
                 // EULA-gated, so you download it once and point `optix-root` at the unpacked dir.
                 // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
                 //   gpu: [ cuda, optix ]  requires: [ cuda-toolkit ]           // NVIDIA (or gpu: [ nvidia ])
-                //   optix-root: ~/optix/NVIDIA-OptiX-SDK-9.0.0 }
+                //   optix-root: ~/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x
+                //   optix-max-version: 8 }                                      // warn if the SDK is newer
                 // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
                 //   gpu: [ cuda ]  requires: [ cuda-toolkit ] }                // NVIDIA, CUDA only (no OptiX)
                 // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
