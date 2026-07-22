@@ -62,8 +62,11 @@ These are yours to edit at the top of the script (the driver doesn't touch them)
 
 | knob | default | meaning |
 |---|---|---|
-| `CC_OVERRIDE` / `CXX_OVERRIDE` | (system compiler) | e.g. `gcc-14` / `g++-14` |
-| `BPY_PIP` | `python3 -m pip install --user --force-reinstall` | how the `bpy` wheel is installed — **must run on the CPython `bpy` was built against** (point at a matching venv's `pip`) |
+| `CC_OVERRIDE` / `CXX_OVERRIDE` | auto: system compiler, but falls back to newest `g++ <= 13` if the default is `>= 14` (Blender's bundled libs don't build with GCC 14+) | e.g. `gcc-13` / `g++-13` |
+| `BPY_PIP` | (empty) → auto: a `--system-site-packages` venv built from Blender's **own bundled Python** (`lib/<platform>/python/bin/python3.N`), so `bpy` is ABI-matched and self-contained (no system Python needed). Result lands in `<dir>/bpy-venv`. | set to a `pip … install` command to install into a pip of your choice instead |
+
+**Using `bpy` after a `both`/`bpy` build:** run it from the venv the recipe made —
+`<dir>/bpy-venv/bin/python -c 'import bpy; print(bpy.app.version_string)'` (or activate that venv).
 
 `GPU_CMAKE` in the script is computed by the driver from `gpu:` and passed in the environment —
 don't hand-edit it.
