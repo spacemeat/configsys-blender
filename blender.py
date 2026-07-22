@@ -36,10 +36,6 @@ from pathlib import Path
 
 from configsys.plugins import Driver, Result
 
-# a light "is bpy installed?" probe — find_spec doesn't actually import (and load) Blender
-_HAS_BPY = ('python3 -c "import importlib.util,sys; '
-            'sys.exit(0 if importlib.util.find_spec(\'bpy\') else 1)"')
-
 # Cycles GPU backends. Each token -> the CMake -D flags it turns on (optix needs the CUDA
 # toolchain, so it also flips the CUDA binaries flag) and -> a (toolchain probe, SDK component)
 # pair. The SDK component name is what the binding's `requires:` should list AND what the error
@@ -160,14 +156,26 @@ class BlenderBuild(Driver):
     # -- read -------------------------------------------------------------
 
     def get_version(self, rc):
-        '''The version actually built = what the source tree is checked out at, via
-        `git describe --tags`. For a tag build (`ref: v4.3.2`) that's exactly the tag, so it
-        matches get_latest (the ref) and the menu reads "up to date" instead of "built" vs
-        "v4.3.2". "installed" still means bpy is importable; a master build describes as
-        `<tag>-<n>-g<hash>`. Falls back to 'built' if the tree has no describable tag.'''
-        if not self.runner.run(_HAS_BPY).ok:
+        '''"installed" = the requested target's artifact exists: the editor binary for
+        editor/both, and/or bpy importable in the bundled-python VENV for bpy/both (NOT the
+        system python — bpy is installed into <dir>/bpy-venv, see the recipe). If built, the
+        version is what the source is checked out at (`git describe --tags`): for a tag build
+        that equals get_latest (the ref) so the menu reads "up to date"; a master build describes
+        as `<tag>-<n>-g<hash>`. Falls back to 'built' if the tree has no describable tag.'''
+        root = self._build_dir(rc)
+        target = rc.fields.get('target') or 'both'
+        built = False
+        if target in ('editor', 'both'):
+            editor = root / 'build_linux' / 'bin' / 'blender'
+            built = self.runner.run(f'test -x {shlex.quote(str(editor))}').ok
+        if not built and target in ('bpy', 'both'):
+            vpy = root / 'bpy-venv' / 'bin' / 'python'
+            built = self.runner.run(
+                f'{shlex.quote(str(vpy))} -c "import importlib.util,sys; '
+                f"sys.exit(0 if importlib.util.find_spec('bpy') else 1)\"").ok
+        if not built:
             return None
-        src = self._build_dir(rc) / 'blender'
+        src = root / 'blender'
         r = self.runner.run(f'git -C {shlex.quote(str(src))} describe --tags')
         return (r.stdout.strip() if r.ok else '') or 'built'
 
