@@ -14,9 +14,14 @@
             install: [
                 { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }
 
-                // GPU example — replace the CPU binding above with a variant like this:
+                // GPU example — replace the CPU binding above with a variant like this. NOTE for
+                // optix: CUDA installs itself (requires: cuda-toolkit) but the OptiX SDK is
+                // EULA-gated, so you download it once and point `optix-root` at the unpacked dir.
                 // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
-                //   gpu: [ cuda, optix ]  requires: [ cuda-toolkit ] }        // NVIDIA (or gpu: [ nvidia ])
+                //   gpu: [ cuda, optix ]  requires: [ cuda-toolkit ]           // NVIDIA (or gpu: [ nvidia ])
+                //   optix-root: ~/optix/NVIDIA-OptiX-SDK-9.0.0 }
+                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
+                //   gpu: [ cuda ]  requires: [ cuda-toolkit ] }                // NVIDIA, CUDA only (no OptiX)
                 // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
                 //   gpu: [ hip ]  requires: [ rocm-hip ] }                     // AMD
                 // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both

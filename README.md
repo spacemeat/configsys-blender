@@ -37,19 +37,29 @@ before a long build and fails loud (never a silent CPU fallback).
 | `gpu:` token | CMake flag(s) set | `requires:` (SDK component) | toolchain probe | notes |
 |---|---|---|---|---|
 | `cuda` | `WITH_CYCLES_CUDA_BINARIES=ON` | `cuda-toolkit` | `nvcc` | NVIDIA general compute |
-| `optix` | `WITH_CYCLES_DEVICE_OPTIX=ON` (+ CUDA binaries) | `cuda-toolkit` | `nvcc` | RTX ray-tracing; implies the CUDA toolchain |
+| `optix` | `WITH_CYCLES_DEVICE_OPTIX=ON` (+ CUDA binaries) + `OPTIX_ROOT_DIR` | `cuda-toolkit` **+ `optix-root:`** | `nvcc` + `optix.h` | RTX ray-tracing; implies the CUDA toolchain |
 | `hip` | `WITH_CYCLES_HIP_BINARIES=ON` | `rocm-hip` | `hipcc` | AMD |
 | `oneapi` | `WITH_CYCLES_DEVICE_ONEAPI=ON` (+ ONEAPI binaries) | `intel-oneapi-basekit` | `icpx` | Intel Arc / Xe |
 
 Vendor aliases (sugar): `nvidia` → `cuda`+`optix`, `amd` → `hip`, `intel` → `oneapi`. A build may
 combine backends: `gpu: [ cuda, optix, hip ]  requires: [ cuda-toolkit, rocm-hip ]`.
 
+**OptiX is special.** CUDA installs itself (`requires: cuda-toolkit`), but the OptiX SDK's build
+headers are **EULA-gated and can't be auto-fetched**. Download the SDK once from
+[developer.nvidia.com](https://developer.nvidia.com/designworks/optix/download) (accept its EULA),
+unpack it, and set **`optix-root:`** to that directory on the binding. The driver validates
+`<optix-root>/include/optix.h` exists and passes `OPTIX_ROOT_DIR` to cmake — a missing/unset
+`optix-root` fails fast with guidance, not a raw cmake error. The OptiX *runtime* ships with the
+NVIDIA driver (`libnvoptix`), so there's nothing else to install. (No `optix-root` needed for a
+CUDA-only build — drop `optix` from `gpu:`.)
+
 Example NVIDIA binding:
 
 ```
 blender: { install: [
     { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
-      gpu: [ cuda, optix ]  requires: [ cuda-toolkit ] }
+      gpu: [ cuda, optix ]  requires: [ cuda-toolkit ]
+      optix-root: ~/optix/NVIDIA-OptiX-SDK-9.0.0 }
 ] }
 ```
 

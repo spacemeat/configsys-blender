@@ -20,6 +20,11 @@ Component shape:
           and the requires: list are the two lists the author keeps in sync; a mismatch (gpu
           names a backend whose toolchain isn't installed) is caught here, loudly, before a long
           build — never a silent CPU fallback.
+  optix-root  REQUIRED when gpu includes `optix`: the path to an unpacked NVIDIA OptiX SDK. OptiX
+          differs from CUDA — its build headers are EULA-gated and user-obtained (not auto-
+          installable), so you download the SDK once (developer.nvidia.com) and point optix-root
+          at it; the driver validates include/optix.h is there and passes OPTIX_ROOT_DIR to cmake.
+          The OptiX *runtime* comes from the NVIDIA driver (libnvoptix), so nothing else to install.
 
 `get_version` reports built once `bpy` is importable. Uninstall LEAVES the source tree in place
 (auto-removing a checkout with your local work is too destructive). The driver is user-space; the
@@ -96,6 +101,25 @@ class BlenderBuild(Driver):
                     flags.append(f)
         return ' '.join(flags)
 
+    def _optix_root_flag(self, rc):
+        '''Returns (cmake_flag, None) pointing OptiX at the user-supplied SDK, or (None, error).
+        Unlike CUDA (freely installable via `requires: cuda-toolkit`), the OptiX SDK headers are
+        EULA-gated and user-obtained — not auto-installable — so an optix build must set
+        `optix-root:` to the unpacked SDK dir; the driver just validates it and points cmake at it
+        (Blender's FindOptiX reads OPTIX_ROOT_DIR). The header check is pretend-tolerant (the
+        runner passes under --pretend). Assumes no spaces in the path (cmake arg-splitting).'''
+        root = rc.fields.get('optix-root')
+        if not root:
+            return None, ("gpu 'optix' requested but 'optix-root' is unset — download the OptiX "
+                          "SDK from developer.nvidia.com (accept its EULA), unpack it, and set "
+                          "optix-root: <that dir> on this binding")
+        root_p = self.paths.expand(root) if self.paths is not None else Path(root).expanduser()
+        header = root_p / 'include' / 'optix.h'
+        if not self.runner.run(f'test -e {shlex.quote(str(header))}').ok:
+            return None, (f"optix-root {root_p} has no include/optix.h — point it at an unpacked "
+                          f"NVIDIA OptiX SDK directory")
+        return f'-D OPTIX_ROOT_DIR={root_p}', None
+
     # -- read -------------------------------------------------------------
 
     def get_version(self, rc):
@@ -138,6 +162,13 @@ class BlenderBuild(Driver):
                     f"(blender-build: gpu {b!r} requested but its toolchain is missing — add "
                     f"the {sdk!r} component to this binding's requires:, then sync)", 1)
         gpu_cmake = self._gpu_cmake(backends)
+        # optix needs its EULA-gated SDK headers, which the user supplies via `optix-root:` (CUDA
+        # is auto via requires:, OptiX can't be) — validate + point cmake at OPTIX_ROOT_DIR.
+        if 'optix' in backends:
+            flag, err = self._optix_root_flag(rc)
+            if err:
+                return Result(f'(blender-build: {err})', 1)
+            gpu_cmake = (gpu_cmake + ' ' + flag).strip()
         ref = shlex.quote(rc.fields.get('ref') or '')
         d = shlex.quote(str(self._build_dir(rc)))
         target = shlex.quote(rc.fields.get('target') or 'both')
