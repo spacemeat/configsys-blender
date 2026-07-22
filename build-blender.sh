@@ -47,6 +47,36 @@ if [ -z "$CXX_OVERRIDE" ] && command -v g++ >/dev/null 2>&1; then
     fi
 fi
 
+# CUDA/OptiX kernels are compiled by nvcc, which rejects a HOST compiler newer than the CUDA
+# toolkit supports (host_config.h: e.g. CUDA 11.5 allows gcc <= 11). Only nvcc hits this — Cycles'
+# CUDA host .cpp uses the driver API via cuew, not cuda_runtime.h — so we DON'T lower the main
+# compiler (which may need to be newer for Blender's bundled libs); we point just nvcc at a
+# compatible g++ via CUDA_HOST_COMPILER (Cycles passes it to nvcc as -ccbin). Read the limit from
+# the toolkit's host_config.h so it tracks whatever CUDA is installed.
+case " $GPU_CMAKE " in
+    *CUDA*|*OPTIX*)
+        _cuda_max=""
+        for _hc in /usr/include/crt/host_config.h /usr/local/cuda*/include/crt/host_config.h \
+                   "$(command -v nvcc 2>/dev/null | xargs -r dirname 2>/dev/null)/../include/crt/host_config.h"; do
+            if [ -f "$_hc" ]; then
+                _cuda_max=$(grep -oE 'later than [0-9]+' "$_hc" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+                [ -n "$_cuda_max" ] && break
+            fi
+        done
+        if [ -n "$_cuda_max" ]; then
+            _v="$_cuda_max"
+            while [ "$_v" -ge 8 ]; do
+                if command -v "g++-$_v" >/dev/null 2>&1; then
+                    GPU_CMAKE="$GPU_CMAKE -D CUDA_HOST_COMPILER=$(command -v "g++-$_v")"
+                    echo "build-blender: CUDA toolkit caps the nvcc host compiler at g++ $_cuda_max — using g++-$_v for kernels"
+                    break
+                fi
+                _v=$((_v - 1))
+            done
+        fi
+    ;;
+esac
+
 CC_ENV=()
 [ -n "$CC_OVERRIDE" ]  && CC_ENV+=("CC=$CC_OVERRIDE")
 [ -n "$CXX_OVERRIDE" ] && CC_ENV+=("CXX=$CXX_OVERRIDE")
