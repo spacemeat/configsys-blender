@@ -69,9 +69,11 @@ class BlenderBuild(Driver):
         return self.scoped_dir(rc.fields.get('dir') or 'blender-git', rc)
 
     def _script(self, rc):
-        # build-blender.sh ships next to the .hu that defined this component (the plugin dir)
-        root = Path(rc.source).parent if rc.source else Path('.')
-        return root / 'build-blender.sh'
+        # build-blender.sh ships in THIS driver's plugin dir (next to blender.py) — find it via
+        # __file__, NOT next to rc.source. The binding may be overridden in another layer (a user's
+        # config / primary plugin) that doesn't carry the recipe — and that override IS the normal
+        # way to set gpu:/ref:, so we must not assume the recipe sits beside the binding's source.
+        return Path(__file__).resolve().parent / 'build-blender.sh'
 
     # -- gpu backends -----------------------------------------------------
 
