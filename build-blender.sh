@@ -16,11 +16,13 @@ SRC="$ROOT/blender"
 CC_OVERRIDE=""            # e.g. "gcc-14"  (empty = system default compiler)
 CXX_OVERRIDE=""          # e.g. "g++-14"
 
-# bpy install: a wheel pip-installed into your USER site-packages by default.
-#   IMPORTANT: bpy is pinned to Blender's bundled CPython (e.g. 3.11). `pip` must run under a
-#   MATCHING interpreter or `import bpy` will fail. For a clean match, point BPY_PIP at a venv on
-#   that Python, e.g.  BPY_PIP="$HOME/.venvs/bpy311/bin/pip install --force-reinstall"
-BPY_PIP="python3 -m pip install --user --force-reinstall"
+# bpy install target. bpy is an ABI-locked extension for Blender's OWN bundled CPython (e.g. the
+#   cp311 wheel imports ONLY under Python 3.11) — the system python is usually a different version,
+#   so `import bpy` fails there. DEFAULT (BPY_PIP empty): the bpy step builds a venv FROM Blender's
+#   bundled interpreter (perfectly ABI-matched, self-contained, no system Python needed) and
+#   installs bpy into it — see the bpy step. Set BPY_PIP to a `pip ... install` command to instead
+#   install into a pip of your choice (e.g. your own matching-version venv).
+BPY_PIP="${BPY_PIP:-}"
 
 # GPU: the driver computes GPU_CMAKE from the component's `gpu:` field (see the README token
 # table) and passes it in the environment. Don't hand-edit this — change the gpu: field instead.
@@ -90,9 +92,29 @@ if [ "$TARGET" = editor ] || [ "$TARGET" = both ]; then
 fi
 if [ "$TARGET" = bpy ] || [ "$TARGET" = both ]; then
     env "${CC_ENV[@]}" make bpy BUILD_CMAKE_ARGS="$GPU_CMAKE"
-    # 5. package the module as a wheel and install it
+    # 5. package the module as a wheel and install it (into an ABI-matched interpreter).
     python3 ./build_files/utils/make_bpy_wheel.py "$ROOT/build_linux_bpy/bin" \
         --build-dir "$ROOT/build_linux_bpy" --output-dir "$ROOT"
-    $BPY_PIP "$ROOT"/bpy-*.whl
-    echo "build-blender: bpy wheel installed — test: python3 -c 'import bpy; print(bpy.app.version_string)'"
+    wheel=$(ls "$ROOT"/bpy-*.whl 2>/dev/null | head -1)
+    [ -n "$wheel" ] || { echo "build-blender: no bpy wheel produced in $ROOT" >&2; exit 1; }
+    if [ -n "$BPY_PIP" ]; then
+        # user-chosen pip (their responsibility to match Blender's bundled Python version).
+        $BPY_PIP "$wheel"
+        echo "build-blender: bpy installed via BPY_PIP — test 'import bpy' under that interpreter"
+    else
+        # DEFAULT: a venv built from Blender's OWN bundled Python — the exact interpreter bpy was
+        # compiled against, so it always matches (cp311 wheel -> the bundled 3.11), self-contained,
+        # no system Python required. `lib/<platform>_<arch>/python/bin/python3.N` (has venv+pip).
+        bpy_py=$(ls "$SRC"/lib/*/python/bin/python3.* 2>/dev/null | grep -E 'python3\.[0-9]+$' | head -1)
+        [ -n "$bpy_py" ] || { echo "build-blender: bundled python not found under $SRC/lib/*/python/bin — set BPY_PIP to a matching-ABI pip" >&2; exit 1; }
+        # --system-site-packages so the venv inherits Blender's bundled deps — critically numpy.
+        # bpy is compiled against the bundled numpy's C-ABI (1.x here); a fresh PyPI numpy 2.x
+        # breaks it with "_ARRAY_API not found". This runs bpy against exactly what Blender ships
+        # (numpy/cython/requests/zstandard), no PyPI pull, and tracks whatever a future Blender
+        # bundles. bpy itself installs into the venv and takes precedence.
+        "$bpy_py" -m venv --clear --system-site-packages "$ROOT/bpy-venv"
+        "$ROOT/bpy-venv/bin/pip" install --disable-pip-version-check --quiet "$wheel"
+        echo "build-blender: bpy installed into $ROOT/bpy-venv (Blender's bundled $("$bpy_py" -V 2>&1))"
+        echo "build-blender: test:  $ROOT/bpy-venv/bin/python -c 'import bpy; print(bpy.app.version_string)'"
+    fi
 fi
