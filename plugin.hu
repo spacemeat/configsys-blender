@@ -3,7 +3,6 @@
     // from source, so `import bpy` matches the editor. Overrides base configsys's native
     // `blender` wherever this plugin is loaded + trusted.
     name: configsys-blender
-    version: 0.1.0
     requires-abi: 1
 
     provides: { drivers: [ blender-build ] }
