@@ -40,6 +40,52 @@ def test_each_via_presets_its_backend_set(drivers):
     assert drivers['blender-oneapi'](r)._gpu_backends(_rc()) == ['oneapi']
 
 
+def test_variant_marker_discriminates_get_version(drivers):
+    from configsys.runner import Result
+
+    class Fake:
+        '''A built blender whose marker records `via=<marked>`.'''
+        def __init__(self, marked):
+            self.marked = marked
+
+        def run(self, cmd, **kw):
+            if cmd.startswith('test -x'):
+                return Result(cmd, 0)                        # editor present
+            if cmd.startswith('cat ') and '.configsys-variant' in cmd:
+                return Result(cmd, 0, stdout=f'via={self.marked}\ngpu=x\n')
+            if 'describe' in cmd:
+                return Result(cmd, 0, stdout='v4.3.2\n')
+            return Result(cmd, 0)
+
+    # marker says blender-optix -> ONLY that via reports installed
+    for via, drv in drivers.items():
+        v = drv(Fake('blender-optix')).get_version(_rc(dir='blender-git'))
+        assert (v == 'v4.3.2') == (via == 'blender-optix'), (via, v)
+    # marker says blender-build (base/CPU) -> only the base via claims it
+    for via, drv in drivers.items():
+        v = drv(Fake('blender-build')).get_version(_rc(dir='blender-git'))
+        assert (v == 'v4.3.2') == (via == 'blender-build'), (via, v)
+
+
+def test_probe_variant_from_kernels(drivers):
+    from configsys.runner import Result
+
+    class Kernels:
+        '''No marker; a .optixir kernel is present under the build tree -> optix.'''
+        def run(self, cmd, **kw):
+            if cmd.startswith('test -x'):
+                return Result(cmd, 0)
+            if cmd.startswith('cat '):
+                return Result(cmd, 1)                        # no marker
+            if 'optixir' in cmd:
+                return Result(cmd, 0)                        # find ... optixir -> found
+            if 'find ' in cmd:
+                return Result(cmd, 1)                        # other kernels absent
+            return Result(cmd, 0)
+
+    assert drivers['blender-build'](Kernels()).detected_variant(_rc(dir='blender-git')) == 'blender-optix'
+
+
 def test_binding_gpu_overrides_the_preset(drivers):
     r = Runner(pretend=True)
     # a binding-level `gpu:` still wins over the via's preset

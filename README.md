@@ -106,3 +106,12 @@ These are yours to edit at the top of the script (the driver doesn't touch them)
 
 `GPU_CMAKE` in the script is computed by the driver from `gpu:` and passed in the environment —
 don't hand-edit it.
+
+## Detecting what's built + `locations:`
+
+`get_version` reports installed **only for the GPU flavor actually built**. Each build stamps a
+`.configsys-variant` marker (its via + backends); a build configsys made is identified exactly, and
+one it didn't is best-effort probed from compiled Cycles kernels (`*.optixir`→optix, `*.cubin`→cuda,
+`*.hipfb`→hip). So `configsys versions blender` names which flavor is built, and — even unpinned —
+`configsys inspect` surfaces a source build as *"also present"*. Built Blender somewhere nonstandard?
+Point configsys at it: `locations: { blender: /path/to/blender-git }` in your config.

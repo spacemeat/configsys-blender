@@ -67,7 +67,8 @@ class BlenderBuild(Driver):
     gpu_preset = ()
 
     def _build_dir(self, rc):
-        return self.scoped_dir(rc.fields.get('dir') or 'blender-git', rc)
+        # a config `locations:` override (absolute) points straight at the build tree, scope-bypassing
+        return self.location_override(rc) or self.scoped_dir(rc.fields.get('dir') or 'blender-git', rc)
 
     def _script(self, rc):
         # build-blender.sh ships in THIS driver's plugin dir (next to blender.py) — find it via
@@ -160,13 +161,59 @@ class BlenderBuild(Driver):
 
     # -- read -------------------------------------------------------------
 
+    # -- variant identity -------------------------------------------------
+
+    def _variant_marker(self, rc):
+        return self._build_dir(rc) / '.configsys-variant'
+
+    def _write_variant_marker(self, rc, backends):
+        content = f'via={self.name}\ngpu={",".join(backends)}\n'
+        self.runner.run(f'printf %s {shlex.quote(content)} > '
+                        f'{shlex.quote(str(self._variant_marker(rc)))}')
+
+    def _read_variant_marker(self, rc):
+        r = self.runner.run(f'cat {shlex.quote(str(self._variant_marker(rc)))} 2>/dev/null')
+        if not r.ok:
+            return None
+        for line in r.stdout.splitlines():
+            if line.startswith('via='):
+                return line[len('via='):].strip() or None
+        return None
+
+    def _probe_variant(self, rc):
+        '''Best-effort GPU flavor from compiled Cycles kernels under the build tree: *.optixir ->
+        optix, *.cubin -> cuda, *.hipfb -> hip, none -> the CPU build. (oneAPI isn't kernel-probed
+        reliably; it falls to the CPU guess — the marker is the reliable path.)'''
+        bl = shlex.quote(str(self._build_dir(rc) / 'build_linux'))
+
+        def has(ext):
+            return self.runner.run(f"find {bl} -name '*.{ext}' 2>/dev/null | grep -q .").ok
+        if has('optixir'):
+            return 'blender-optix'
+        if has('cubin'):
+            return 'blender-cuda'
+        if has('hipfb'):
+            return 'blender-hip'
+        return 'blender-build'
+
+    def detected_variant(self, rc):
+        '''The via of the GPU flavor actually built at the build dir: the stamped marker
+        (authoritative) -> a best-effort kernel probe -> 'unknown' (built but unidentifiable) /
+        None (nothing built). Used by variant-aware get_version and the coexistence detector.'''
+        root = self._build_dir(rc)
+        editor = root / 'build_linux' / 'bin' / 'blender'
+        vpy = root / 'bpy-venv' / 'bin' / 'python'
+        if not (self.runner.run(f'test -x {shlex.quote(str(editor))}').ok
+                or self.runner.run(f'test -x {shlex.quote(str(vpy))}').ok):
+            return None
+        return self._read_variant_marker(rc) or self._probe_variant(rc) or 'unknown'
+
     def get_version(self, rc):
-        '''"installed" = the requested target's artifact exists: the editor binary for
-        editor/both, and/or bpy importable in the bundled-python VENV for bpy/both (NOT the
-        system python — bpy is installed into <dir>/bpy-venv, see the recipe). If built, the
-        version is what the source is checked out at (`git describe --tags`): for a tag build
-        that equals get_latest (the ref) so the menu reads "up to date"; a master build describes
-        as `<tag>-<n>-g<hash>`. Falls back to 'built' if the tree has no describable tag.'''
+        '''"installed" = the requested target's artifact exists (editor binary for editor/both,
+        and/or bpy importable in the bundled-python VENV for bpy/both) AND this via is the GPU
+        flavor actually built there (`detected_variant`: marker, else kernel probe) — the base CPU
+        via also claims an unidentifiable build. Version is `git describe --tags` (tag build =>
+        matches get_latest => "up to date"; master => `<tag>-<n>-g<hash>`; else 'built').'''
         root = self._build_dir(rc)
         target = rc.fields.get('target') or 'both'
         built = False
@@ -180,6 +227,10 @@ class BlenderBuild(Driver):
                 f"sys.exit(0 if importlib.util.find_spec('bpy') else 1)\"").ok
         if not built:
             return None
+        dv = self.detected_variant(rc)
+        is_base = not self.gpu_preset
+        if not (dv == self.name or (is_base and dv in (None, 'unknown'))):
+            return None                      # a different flavor is what's built here
         src = root / 'blender'
         r = self.runner.run(f'git -C {shlex.quote(str(src))} describe --tags')
         return (r.stdout.strip() if r.ok else '') or 'built'
@@ -223,8 +274,11 @@ class BlenderBuild(Driver):
         d = shlex.quote(str(self._build_dir(rc)))
         target = shlex.quote(rc.fields.get('target') or 'both')
         env = f'GPU_CMAKE={shlex.quote(gpu_cmake)} ' if gpu_cmake else ''
-        return self.runner.run(
+        res = self.runner.run(
             f'{env}bash {shlex.quote(str(script))} {ref} {d} {target}', capture=False)
+        if res.ok:
+            self._write_variant_marker(rc, backends)   # stamp which GPU flavor this build IS
+        return res
 
     def upgrade(self, rc):
         return self.install(rc)   # fetch + checkout + rebuild
