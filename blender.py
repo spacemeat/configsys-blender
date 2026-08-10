@@ -61,6 +61,11 @@ class BlenderBuild(Driver):
     default_scope = 'user'
     honors_scope = True
 
+    # Default GPU backends when the binding names none. The base driver is CPU-only; the
+    # pinnable variant subclasses below preset a backend so the flavor is chosen by WHICH via
+    # you pin (`blender-cuda`, `blender-optix`, …) — a binding-level `gpu:` still overrides.
+    gpu_preset = ()
+
     def _build_dir(self, rc):
         return self.scoped_dir(rc.fields.get('dir') or 'blender-git', rc)
 
@@ -76,7 +81,7 @@ class BlenderBuild(Driver):
     def _gpu_backends(self, rc):
         '''The `gpu:` field expanded to canonical backend tokens (aliases resolved, deduped,
         order preserved). Raises ValueError on an unknown token.'''
-        raw = rc.fields.get('gpu') or []
+        raw = rc.fields.get('gpu') or list(self.gpu_preset)
         if isinstance(raw, str):
             raw = [raw]
         out = []
@@ -264,4 +269,25 @@ class BlenderBuild(Driver):
         return str(self._build_dir(rc))
 
 
-DRIVERS = [BlenderBuild]
+# Pinnable build flavors — each is a distinct `via:` (install method) on the one `blender`
+# component, so `configsys pin blender blender-<flavor>` selects it. All share the build logic;
+# they differ only in the default backend set (a binding `gpu:` still wins). OptiX also needs an
+# `optix-root:` on its binding (or via env) — the build fails loud if it's unset.
+class BlenderCuda(BlenderBuild):
+    name = 'blender-cuda'
+    gpu_preset = ('cuda',)
+
+class BlenderOptix(BlenderBuild):
+    name = 'blender-optix'
+    gpu_preset = ('cuda', 'optix')
+
+class BlenderHip(BlenderBuild):
+    name = 'blender-hip'
+    gpu_preset = ('hip',)
+
+class BlenderOneapi(BlenderBuild):
+    name = 'blender-oneapi'
+    gpu_preset = ('oneapi',)
+
+
+DRIVERS = [BlenderBuild, BlenderCuda, BlenderOptix, BlenderHip, BlenderOneapi]

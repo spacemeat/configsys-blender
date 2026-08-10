@@ -1,12 +1,26 @@
 # configsys-blender
 
 A [configsys](https://github.com/spacemeat/configsys) **code plugin** that builds Blender
-(editor + the `bpy` Python module) from source, so `import bpy` matches the editor. It
-overrides base configsys's native `blender` wherever this plugin is loaded and trusted.
+(editor + the `bpy` Python module) from source, so `import bpy` matches the editor.
 
-- `blender.py` — the `blender-build` driver (orchestration + `gpu:`→CMake mapping + validation).
+Base's native `blender` stays the **default** — nothing auto-builds. Each GPU flavor is a **pinnable
+install method** (its own `via:`) on the one `blender` component, so you keep control over which one
+runs:
+
+```console
+$ configsys where blender          # lists the methods: native (default), blender-build (CPU),
+                                    #   blender-cuda, blender-optix, blender-hip, blender-oneapi
+$ configsys pin blender blender-cuda
+$ configsys install blender        # builds Cycles with CUDA (pulls cuda-toolkit)
+```
+
+Pinning a flavor pulls just that flavor's SDK (named in its binding's `requires:`); an unpinned
+machine drags in nothing. `configsys pin blender native` goes back to the distro package.
+
+- `blender.py` — the `blender-build` driver + thin per-flavor subclasses (`blender-cuda`, …), each
+  presetting a backend; `gpu:`→CMake mapping + toolchain validation live in the base class.
 - `build-blender.sh` — the build recipe (edit the knobs: compiler, bpy install target).
-- `blender.hu` — the `blender` component override.
+- `blender.hu` — the `blender` component: one binding per flavor via.
 
 The GPU SDK components a `gpu:` build depends on (`cuda-toolkit`, `rocm-hip`,
 `intel-oneapi-basekit`) live in **base configsys** (`routes.hu`), not this plugin.
@@ -14,25 +28,35 @@ The GPU SDK components a `gpu:` build depends on (`cuda-toolkit`, `rocm-hip`,
 Because it ships code, it needs a one-time `configsys plugin trust configsys-blender`.
 See `docs/PLAN.md` for the decisions and the parked work.
 
-## Component fields (`blender.hu`)
+## Methods (which flavor `pin` selects)
 
-The `blender` binding is `{ via: blender-build ... }` with these fields:
+| `via:` | backend preset | `requires:` (SDK, from base) | pin with |
+|---|---|---|---|
+| `blender-build` | none (CPU) | — | `pin blender blender-build` |
+| `blender-cuda` | `cuda` | `cuda-toolkit` | `pin blender blender-cuda` |
+| `blender-optix` | `cuda` + `optix` | `cuda-toolkit` (+ `optix-root:`) | `pin blender blender-optix` |
+| `blender-hip` | `hip` | `rocm-hip` | `pin blender blender-hip` |
+| `blender-oneapi` | `oneapi` | `intel-oneapi-basekit` | `pin blender blender-oneapi` |
+
+Each via is a thin subclass that presets its backend, so the flavor is chosen by **which method you
+pin** — no editing. The base source-build fields still apply to every binding:
 
 | field | values | default | meaning |
 |---|---|---|---|
 | `ref` | git tag/branch, e.g. `v4.3.2` | (default branch) | version to build; pin it to match your editor |
 | `dir` | path (scope-honored) | `blender-git` | build-tree parent — bare-relative → `~/<dir>` (user) or `/opt/<dir>` (system) |
 | `target` | `editor` \| `bpy` \| `both` | `both` | what to build |
-| `gpu` | list of backend tokens / vendor aliases | (absent = CPU-only) | Cycles GPU backends to compile kernels for (see below) |
-| `requires` | SDK component name(s) | — | **must list the SDK for each `gpu:` backend** (auto-installed by resolution) |
+| `gpu` | list of backend tokens / vendor aliases | (the via's preset) | **override** the backend set on a single binding (see below) |
+| `requires` | SDK component name(s) | — | **must list the SDK for the backend** (auto-installed by resolution) |
 
-## GPU backends (`gpu:` + `requires:`)
+## GPU backends (the `gpu:` override + `requires:`)
 
 GPU support is a *set* of backends compiled into one build (additive — exactly how Blender's
-official builds ship). Physical card count is irrelevant to the build; Cycles picks devices at
-render time. Set `gpu:` to drive the flags **and** name the matching SDK in the **same
-binding's** `requires:` so resolution installs it. The driver validates each toolchain is present
-before a long build and fails loud (never a silent CPU fallback).
+official builds ship). Each `via:` presets its set (table above); a binding-level `gpu:` **overrides**
+it and can compile several at once. Physical card count is irrelevant to the build; Cycles picks
+devices at render time. Whatever the backend set, name the matching SDK in the **same binding's**
+`requires:` so resolution installs it. The driver validates each toolchain is present before a long
+build and fails loud (never a silent CPU fallback).
 
 | `gpu:` token | CMake flag(s) set | `requires:` (SDK component) | toolchain probe | notes |
 |---|---|---|---|---|

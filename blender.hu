@@ -1,32 +1,29 @@
 {
-    // Override base configsys's native `blender` with a from-source build (editor + a matching
-    // `bpy` module), wherever this plugin is loaded. Everything wavy lives in build-blender.sh;
-    // this just parameterizes it. `ref` pins the version to match your editor.
+    // From-source Blender (editor + a matching `bpy` module), ADDED as pinnable install methods on
+    // base configsys's `blender`. Base's native package stays the DEFAULT — nothing auto-builds.
+    // You choose a GPU flavor by PINNING its method (control over automation):
     //
-    // CPU-only by default: the binding below requires nothing beyond the recipe's own build deps.
-    // To render on a GPU, give the binding a `gpu:` list AND name the matching SDK component(s) in
-    // `requires:` on the SAME binding — the driver maps the tokens to Cycles CMake flags and
-    // refuses to build if a toolchain is missing. Because the SDK is a `requires:` on the GPU
-    // binding only, a casual CPU build never drags in something heavy like CUDA. Token table +
-    // knobs are in README.md; the SDK components (cuda-toolkit, ...) now live in base routes.hu.
+    //   configsys pin blender blender-cuda     # then `install blender` builds Cycles with CUDA
+    //   configsys pin blender blender-optix    # CUDA + OptiX (needs the EULA-gated SDK, see below)
+    //   configsys pin blender blender-hip      # AMD ROCm/HIP
+    //   configsys pin blender blender-build    # plain CPU build
+    //   configsys pin blender native           # back to the distro package
+    //
+    // Each flavor is its OWN `via:` (a thin subclass of the one build driver, presetting the
+    // backend). The binding names the SDK that flavor needs in `requires:` (from base routes.hu),
+    // so pinning it makes the toolkit install itself; a flavor you never pin drags in nothing. The
+    // driver maps the backend to Cycles CMake flags and refuses to build if a toolchain is missing.
+    // `configsys where blender` lists all the methods; token/knob tables are in README.md.
     components: {
         blender: {
             install: [
-                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }
-
-                // GPU example — replace the CPU binding above with a variant like this. NOTE for
-                // optix: CUDA installs itself (requires: cuda-toolkit) but the OptiX SDK is
-                // EULA-gated, so you download it once and point `optix-root` at the unpacked dir.
-                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
-                //   gpu: [ cuda, optix ]  requires: [ cuda-toolkit ]           // NVIDIA (or gpu: [ nvidia ])
-                //   optix-root: ~/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x
-                //   optix-max-version: 8 }                                      // warn if the SDK is newer
-                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
-                //   gpu: [ cuda ]  requires: [ cuda-toolkit ] }                // NVIDIA, CUDA only (no OptiX)
-                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
-                //   gpu: [ hip ]  requires: [ rocm-hip ] }                     // AMD
-                // { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
-                //   gpu: [ oneapi ]  requires: [ intel-oneapi-basekit ] }      // Intel
+                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }   // CPU
+                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  requires: [ cuda-toolkit ] }   // NVIDIA CUDA
+                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  requires: [ rocm-hip ] }       // AMD HIP
+                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  requires: [ intel-oneapi-basekit ] }  // Intel oneAPI (Arc / compute iGPU)
+                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  requires: [ cuda-toolkit ]     // NVIDIA CUDA + OptiX
+                  optix-root: ~/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK and point here
+                  optix-max-version: 8 }                                      // warn if the SDK is newer
             ]
         }
     }
