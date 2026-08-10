@@ -13,15 +13,19 @@
     // backend). The binding names the SDK that flavor needs in `requires:` (from base routes.hu),
     // so pinning it makes the toolkit install itself; a flavor you never pin drags in nothing. The
     // driver maps the backend to Cycles CMake flags and refuses to build if a toolchain is missing.
-    // `configsys where blender` lists all the methods; token/knob tables are in README.md.
+    //
+    // The GPU flavors carry a `when:` on the vendor they need (the shared `gpu` facet), so the
+    // Components screen only offers the ones valid on THIS machine (CUDA/OptiX on nvidia, HIP on
+    // amd, oneAPI when you set `facets.gpu intel`); the CPU build is always offered. Profiles shows
+    // them all, for authoring across machines. `configsys where blender` lists the methods valid here.
     components: {
         blender: {
             install: [
-                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }   // CPU
-                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  requires: [ cuda-toolkit ] }   // NVIDIA CUDA
-                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  requires: [ rocm-hip ] }       // AMD HIP
-                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  requires: [ intel-oneapi-basekit ] }  // Intel oneAPI (Arc / compute iGPU)
-                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  requires: [ cuda-toolkit ]     // NVIDIA CUDA + OptiX
+                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }   // CPU — valid anywhere
+                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit ] }   // NVIDIA CUDA
+                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip ] }       // AMD HIP
+                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit ] }  // Intel oneAPI (set facets.gpu intel)
+                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit ]     // NVIDIA CUDA + OptiX
                   optix-root: ~/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK and point here
                   optix-max-version: 8 }                                      // warn if the SDK is newer
             ]

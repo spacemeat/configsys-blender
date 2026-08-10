@@ -39,7 +39,10 @@ See `docs/PLAN.md` for the decisions and the parked work.
 | `blender-oneapi` | `oneapi` | `intel-oneapi-basekit` | `pin blender blender-oneapi` |
 
 Each via is a thin subclass that presets its backend, so the flavor is chosen by **which method you
-pin** — no editing. The base source-build fields still apply to every binding:
+pin** — no editing. The GPU methods carry a `when:` on the vendor they need (`gpu:nvidia` for
+CUDA/OptiX, `gpu:amd` for HIP, `gpu:intel` for oneAPI), so the **Components** screen only offers the
+ones valid on this machine; the CPU build is always offered, and **Profiles** lists them all (for
+authoring across machines). The base source-build fields apply to every binding:
 
 | field | values | default | meaning |
 |---|---|---|---|
