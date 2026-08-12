@@ -20,12 +20,18 @@
     // them all, for authoring across machines. `configsys where blender` lists the methods valid here.
     components: {
         blender: {
+            // Every source variant needs gcc-11 — Blender 4.3's REFERENCE (known-good) compiler.
+            // Requiring it guarantees the recipe's "fall back off a too-new default g++" step has the
+            // right compiler to reach for, instead of hoping it's installed. (gcc-11 is packaged on
+            // debian/rhel; on a distro where it isn't a component this is an honest unmet-require, not
+            // a silent mid-build failure on a too-new gcc.) The nvcc host-compiler cap is handled
+            // separately in the recipe.
             install: [
-                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both }   // CPU — valid anywhere
-                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit ] }   // NVIDIA CUDA
-                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip ] }       // AMD HIP
-                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit ] }  // Intel oneAPI (set facets.gpu intel)
-                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit ]     // NVIDIA CUDA + OptiX
+                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both  requires: [ gcc-11 ] }   // CPU — valid anywhere
+                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ] }   // NVIDIA CUDA
+                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ] }       // AMD HIP
+                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ] }  // Intel oneAPI (set facets.gpu intel)
+                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]     // NVIDIA CUDA + OptiX
                   optix-root: $CONFIGSYS_SDK_DIR/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK under ~/sdks/optix/ (several versions can coexist there)
                   optix-max-version: 8 }                                      // warn if the SDK is newer
             ]
