@@ -138,21 +138,27 @@ cd "$SRC"
 #    the flag reaches it (the `make update` wrapper doesn't forward it).
 python3 ./build_files/utils/make_update.py --use-linux-libraries
 
-# 3b. CMake BAKES the compiler into build_<platform>/CMakeCache.txt on the first configure and then
-#     IGNORES a later CC/CXX — so a build dir cached with one compiler silently keeps using it
-#     (this is why a stale ~/…/build_linux from an earlier build can defeat the fallback above and
-#     compile with the wrong g++). If our intended C++ compiler differs from what a prior configure
-#     cached, wipe the build dir so the fresh configure adopts the right one. Objects from a
-#     different compiler can't be safely reused anyway.
+# 3b. CMake BAKES absolute paths into build_<platform>/CMakeCache.txt on the first configure and then
+#     IGNORES later changes — so a stale build dir silently keeps using them. Two ways it goes wrong,
+#     both fixed by wiping the build dir for a clean reconfigure (objects from the old config can't be
+#     safely reused anyway):
+#       * COMPILER: a build dir cached with one compiler keeps compiling with it, defeating the g++
+#         fallback above (wrong-g++ builds).
+#       * SOURCE PATH: a build tree that MOVED (e.g. ~/blender-git -> ~/src/blender-git when configsys
+#         switched to $CONFIGSYS_SRC_DIR) has a cached source dir that no longer matches, so cmake
+#         refuses ("does not match the source used to generate cache").
 _want_cxx=$(command -v "${CXX_OVERRIDE:-c++}" 2>/dev/null || echo "${CXX_OVERRIDE:-c++}")
 for _bd in "$ROOT/build_linux" "$ROOT/build_linux_bpy"; do
     _cache="$_bd/CMakeCache.txt"
-    if [ -f "$_cache" ]; then
-        _have_cxx=$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$_cache" | head -1)
-        if [ -n "$_have_cxx" ] && [ "$_have_cxx" != "$_want_cxx" ]; then
-            echo "build-blender: $_bd was configured with $_have_cxx but this build wants ${_want_cxx:-the default} — wiping it for a clean reconfigure"
-            rm -rf "$_bd"
-        fi
+    [ -f "$_cache" ] || continue
+    _have_cxx=$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$_cache" | head -1)
+    _have_src=$(sed -n 's/^CMAKE_HOME_DIRECTORY:[^=]*=//p' "$_cache" | head -1)
+    if [ -n "$_have_cxx" ] && [ "$_have_cxx" != "$_want_cxx" ]; then
+        echo "build-blender: $_bd was configured with $_have_cxx but this build wants ${_want_cxx:-the default} — wiping it for a clean reconfigure"
+        rm -rf "$_bd"
+    elif [ -n "$_have_src" ] && [ "$_have_src" != "$SRC" ]; then
+        echo "build-blender: $_bd was configured for source $_have_src but this build uses $SRC (moved tree?) — wiping it for a clean reconfigure"
+        rm -rf "$_bd"
     fi
 done
 
