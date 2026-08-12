@@ -29,21 +29,25 @@ BPY_PIP="${BPY_PIP:-}"
 GPU_CMAKE="${GPU_CMAKE:-}"   # empty = CPU-only
 # ---------------------------------------------------------------------------
 
-# Blender's bundled libs (nanovdb/openvdb, ...) don't compile with a very new GCC — GCC >= 14
-# rejects nanovdb's template bodies (-Wtemplate-body). Blender 4.3's reference compiler is GCC 11.
-# So if no compiler is forced and the DEFAULT g++ is >= 14 (e.g. a machine whose update-alternatives
-# points cc/g++ at gcc-15), fall back to the newest installed g++ <= 13. Override via CC/CXX_OVERRIDE.
+# Blender's bundled libs don't compile with a too-new GCC. TWO distinct breakages, so we must dodge
+# GCC >= 13, not just >= 14:
+#   * GCC >= 14 rejects nanovdb's template bodies (-Wtemplate-body).
+#   * GCC >= 13 dropped the transitive <cstdint> include, so Blender 4.3's bundled OpenColorIO.h
+#     (`enum ... : uint8_t`, no #include <cstdint>) fails with "'uint8_t' was not declared".
+# Blender 4.3's reference compiler is GCC 11. So if no compiler is forced and the DEFAULT g++ is
+# >= 13 (e.g. update-alternatives points cc/g++ at gcc-15), fall back to the newest installed
+# g++ <= 12. Override via CC/CXX_OVERRIDE (a >= 13 override will hit the OpenColorIO error).
 if [ -z "$CXX_OVERRIDE" ] && command -v g++ >/dev/null 2>&1; then
     _gv=$(g++ -dumpversion 2>/dev/null | cut -d. -f1)
-    if [ "${_gv:-0}" -ge 14 ] 2>/dev/null; then
-        for _v in 13 12 11; do
+    if [ "${_gv:-0}" -ge 13 ] 2>/dev/null; then
+        for _v in 12 11; do
             if command -v "g++-$_v" >/dev/null 2>&1 && command -v "gcc-$_v" >/dev/null 2>&1; then
                 CC_OVERRIDE="gcc-$_v"; CXX_OVERRIDE="g++-$_v"
                 echo "build-blender: default g++ is $_gv (too new for Blender's bundled libs) — using g++-$_v"
                 break
             fi
         done
-        [ -z "$CXX_OVERRIDE" ] && echo "build-blender: WARNING default g++ is $_gv and no g++<=13 found; build may fail on bundled libs" >&2
+        [ -z "$CXX_OVERRIDE" ] && echo "build-blender: WARNING default g++ is $_gv and no g++<=12 found; the build will likely fail on nanovdb/OpenColorIO — install gcc-11/g++-11" >&2
     fi
 fi
 
@@ -133,6 +137,24 @@ cd "$SRC"
 #    old distro libs — the whole point of Blender's precompiled deps. Run the updater directly so
 #    the flag reaches it (the `make update` wrapper doesn't forward it).
 python3 ./build_files/utils/make_update.py --use-linux-libraries
+
+# 3b. CMake BAKES the compiler into build_<platform>/CMakeCache.txt on the first configure and then
+#     IGNORES a later CC/CXX — so a build dir cached with one compiler silently keeps using it
+#     (this is why a stale ~/…/build_linux from an earlier build can defeat the fallback above and
+#     compile with the wrong g++). If our intended C++ compiler differs from what a prior configure
+#     cached, wipe the build dir so the fresh configure adopts the right one. Objects from a
+#     different compiler can't be safely reused anyway.
+_want_cxx=$(command -v "${CXX_OVERRIDE:-c++}" 2>/dev/null || echo "${CXX_OVERRIDE:-c++}")
+for _bd in "$ROOT/build_linux" "$ROOT/build_linux_bpy"; do
+    _cache="$_bd/CMakeCache.txt"
+    if [ -f "$_cache" ]; then
+        _have_cxx=$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$_cache" | head -1)
+        if [ -n "$_have_cxx" ] && [ "$_have_cxx" != "$_want_cxx" ]; then
+            echo "build-blender: $_bd was configured with $_have_cxx but this build wants ${_want_cxx:-the default} — wiping it for a clean reconfigure"
+            rm -rf "$_bd"
+        fi
+    fi
+done
 
 # 4. build the requested target(s)
 if [ "$TARGET" = editor ] || [ "$TARGET" = both ]; then
