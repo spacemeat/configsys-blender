@@ -253,11 +253,11 @@ class BlenderBuild(Driver):
     def install(self, rc):
         script = self._script(rc)
         if not script.exists():
-            return Result(f'(blender-build: recipe {script} not found)', 1)
+            return Result.fail(f'blender-build: recipe {script} not found')
         try:
             backends = self._gpu_backends(rc)
         except ValueError as e:
-            return Result(f'(blender-build: {e})', 1)
+            return Result.fail(f'blender-build: {e}')
         # Each requested backend needs its toolchain on PATH. That toolchain must be declared via
         # the same binding's `requires:` (so resolution installs it); we verify here and fail
         # loud rather than quietly dropping to a CPU-only build. (Under --pretend every probe
@@ -265,16 +265,16 @@ class BlenderBuild(Driver):
         for b in backends:
             probe, sdk = _GPU_PROBE[b]
             if not self.runner.run(probe).ok:
-                return Result(
-                    f"(blender-build: gpu {b!r} requested but its toolchain is missing — add "
-                    f"the {sdk!r} component to this binding's requires:, then sync)", 1)
+                return Result.fail(
+                    f"blender-build: gpu {b!r} requested but its toolchain is missing — add "
+                    f"the {sdk!r} component to this binding's requires:, then sync")
         gpu_cmake = self._gpu_cmake(backends)
         # optix needs its EULA-gated SDK headers, which the user supplies via `optix-root:` (CUDA
         # is auto via requires:, OptiX can't be) — validate + point cmake at OPTIX_ROOT_DIR.
         if 'optix' in backends:
             flag, err = self._optix_root_flag(rc)
             if err:
-                return Result(f'(blender-build: {err})', 1)
+                return Result.fail(f'blender-build: {err}')
             gpu_cmake = (gpu_cmake + ' ' + flag).strip()
         ref = shlex.quote(rc.fields.get('ref') or '')
         d = shlex.quote(str(self._build_dir(rc)))

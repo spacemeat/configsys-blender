@@ -23,6 +23,16 @@ def _rc(**fields):
                              fields=dict(fields), source=str(PLUG / 'blender.hu'))
 
 
+def test_validation_error_is_a_fail_result_reason_in_output_not_command(drivers):
+    # a pre-flight validation failure (here: an unknown gpu backend, which raises before any command
+    # runs) must be a Result.fail -> the reason rides in `output`/stderr (so the CLI, the ! screen,
+    # and the report all surface it), and `cmd` stays empty (no spurious Command block).
+    d = drivers['blender-build'](Runner(pretend=True))
+    res = d.install(_rc(dir='blender-git', target='both', ref='v4.3.2', gpu=['bogus-backend']))
+    assert not res.ok and res.cmd == ''
+    assert 'bogus-backend' in res.output          # the WHY is in output, not stuffed into the command
+
+
 def test_manifest_and_variant_vias(drivers):
     m = plugins.read_manifest(PLUG)
     assert m['name'] == 'configsys-blender' and m['code'] == 'blender.py'

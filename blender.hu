@@ -26,7 +26,7 @@
                 { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip ] }       // AMD HIP
                 { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit ] }  // Intel oneAPI (set facets.gpu intel)
                 { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit ]     // NVIDIA CUDA + OptiX
-                  optix-root: $CONFIGSYS_SDK_DIR/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK into ~/sdks (or point elsewhere)
+                  optix-root: $CONFIGSYS_SDK_DIR/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK under ~/sdks/optix/ (several versions can coexist there)
                   optix-max-version: 8 }                                      // warn if the SDK is newer
             ]
         }
