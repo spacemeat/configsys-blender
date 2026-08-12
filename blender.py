@@ -68,7 +68,12 @@ class BlenderBuild(Driver):
 
     def _build_dir(self, rc):
         # a config `locations:` override (absolute) points straight at the build tree, scope-bypassing
-        return self.location_override(rc) or self.scoped_dir(rc.fields.get('dir') or 'blender-git', rc)
+        d = rc.fields.get('dir') or 'blender-git'
+        # a BARE dir name is a source tree -> live under $CONFIGSYS_SRC_DIR (~/src), matching the core
+        # `source` driver's convention; an authored $VAR / absolute / ~ path passes through untouched.
+        if not str(d).startswith(('$', '/', '~')):
+            d = f'$CONFIGSYS_SRC_DIR/{d}'
+        return self.location_override(rc) or self.scoped_dir(d, rc)
 
     def _script(self, rc):
         # build-blender.sh ships in THIS driver's plugin dir (next to blender.py) — find it via
@@ -117,7 +122,8 @@ class BlenderBuild(Driver):
             return None, ("gpu 'optix' requested but 'optix-root' is unset — download the OptiX "
                           "SDK from developer.nvidia.com (accept its EULA), unpack it, and set "
                           "optix-root: <that dir> on this binding")
-        root_p = self.paths.expand(root) if self.paths is not None else Path(root).expanduser()
+        # install_dir (not expand) so a $CONFIGSYS_SDK_DIR/... optix-root substitutes to ~/sdks/...
+        root_p = self.paths.install_dir(root, 'user') if self.paths is not None else Path(root).expanduser()
         header = root_p / 'include' / 'optix.h'
         if not self.runner.run(f'test -e {shlex.quote(str(header))}').ok:
             return None, (f"optix-root {root_p} has no include/optix.h — point it at an unpacked "
@@ -290,10 +296,10 @@ class BlenderBuild(Driver):
         return Result(f'(blender-build: leaving {self._build_dir(rc)} in place; remove it by hand)', 0)
 
     def reconcile_scope(self, rc, detected, target):
-        # MOVE the build tree between ~/blender-git and /opt/blender-git — never rebuild (the base
-        # reinstall would recompile for ~40 min). The bpy wheel is pip --user (scope-agnostic), so
-        # nothing else to touch. sudo when either side is /opt; chown back to the user on ->user.
-        d = rc.fields.get('dir') or 'blender-git'
+        # MOVE the build tree between the user- and system-scope build dirs (~/src/blender-git and
+        # /opt/src/blender-git by default) — never rebuild (the base reinstall would recompile for
+        # ~40 min). The bpy wheel is pip --user (scope-agnostic), so nothing else to touch. sudo when
+        # either side is /opt; chown back to the user on ->user. Both sides come from _build_dir.
         had, saved = 'scope' in rc.fields, rc.fields.get('scope')
         try:
             rc.fields['scope'] = detected
