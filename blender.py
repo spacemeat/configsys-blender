@@ -281,7 +281,10 @@ class BlenderBuild(Driver):
         target = shlex.quote(rc.fields.get('target') or 'both')
         env = f'GPU_CMAKE={shlex.quote(gpu_cmake)} ' if gpu_cmake else ''
         res = self.runner.run(
-            f'{env}bash {shlex.quote(str(script))} {ref} {d} {target}', capture=False)
+            # presudo: build-blender.sh runs `sudo apt`/install_linux_packages.py for build deps;
+            # pre-authenticate so that internal sudo never prompts mid-build inside the streamed tee
+            # (which would deadlock — two readers on the one terminal).
+            f'{env}bash {shlex.quote(str(script))} {ref} {d} {target}', capture=False, presudo=True)
         if res.ok:
             self._write_variant_marker(rc, backends)   # stamp which GPU flavor this build IS
         return res
