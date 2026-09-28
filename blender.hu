@@ -33,14 +33,22 @@
             // or we add a from-source gcc-11 build. The nvcc host-compiler cap is handled separately
             // in the recipe.
             install: [
-                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both  requires: [ gcc-11 ] }   // CPU — valid anywhere
-                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ] }   // NVIDIA CUDA
-                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ] }       // AMD HIP
-                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ] }  // Intel oneAPI (set facets.gpu intel)
-                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]     // NVIDIA CUDA + OptiX
+                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both  requires: [ gcc-11 ]  suggests: blender-source-glue }   // CPU — valid anywhere
+                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue }   // NVIDIA CUDA
+                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ]  suggests: blender-source-glue }       // AMD HIP
+                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ]  suggests: blender-source-glue }  // Intel oneAPI (set facets.gpu intel)
+                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue     // NVIDIA CUDA + OptiX
                   optix-root: $CONFIGSYS_SDK_DIR/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK under ~/sdks/optix/ (several versions can coexist there)
                   optix-max-version: 8 }                                      // warn if the SDK is newer
             ]
+        }
+        // The source methods' SHELL GLUE: the built editor first on PATH (ahead of a distro
+        // /usr/bin/blender) + `blender-python` for the matching bpy interpreter. Each source binding
+        // `suggests:` it, so it attaches only while a source method is blender's install method — and
+        // configsys removes it when you switch method (`pin blender native`) or remove blender.
+        // Snippets ship in this plugin's glue/shell/<shell>/blender-source.* (bash/zsh/fish/nu/elvish).
+        blender-source-glue: { description: "From-source Blender on PATH (+ `blender-python` for its bpy)."
+            install: [ { via: glue  requires: shell-glue  glue: blender-source } ]
         }
     }
 }
