@@ -52,6 +52,20 @@ authoring across machines). The base source-build fields apply to every binding:
 | `gpu` | list of backend tokens / vendor aliases | (the via's preset) | **override** the backend set on a single binding (see below) |
 | `requires` | SDK component name(s) | — | **must list the SDK for the backend** (auto-installed by resolution) |
 
+## Shell glue (`blender-source-glue`)
+
+Every source method `suggests:` **`blender-source-glue`**, which ships in this plugin
+(`glue/shell/<shell>/blender-source.*` — bash, zsh, fish, nu, elvish). In a new shell it:
+
+- puts the built editor (`<build>/build_linux/bin`) **first** on `PATH`, ahead of a distro
+  `/usr/bin/blender`, so `blender` runs your build;
+- defines **`blender-python`** — the interpreter the `bpy` module was built against (the build's
+  `bpy-venv`), so `blender-python -c "import bpy"` matches the editor.
+
+It's a binding-level suggestion, so it's attached only while a source method is `blender`'s install
+method. Switching away (`configsys pin set blender native`, then `configsys install blender`) or
+`configsys remove blender` removes it along with the build.
+
 ## GPU backends (the `gpu:` override + `requires:`)
 
 GPU support is a *set* of backends compiled into one build (additive — exactly how Blender's
