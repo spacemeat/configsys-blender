@@ -33,15 +33,24 @@
             // or we add a from-source gcc-11 build. The nvcc host-compiler cap is handled separately
             // in the recipe.
             install: [
-                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both  requires: [ gcc-11 ]  suggests: blender-source-glue }   // CPU — valid anywhere
-                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue }   // NVIDIA CUDA
-                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ]  suggests: blender-source-glue }       // AMD HIP
-                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ]  suggests: blender-source-glue }  // Intel oneAPI (set facets.gpu intel)
-                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue     // NVIDIA CUDA + OptiX
+                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both  requires: [ gcc-11 ]  suggests: blender-source-glue
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }   // CPU — valid anywhere
+                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }   // NVIDIA CUDA
+                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ]  suggests: blender-source-glue
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }       // AMD HIP
+                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ]  suggests: blender-source-glue
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }  // Intel oneAPI (set facets.gpu intel)
+                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest }     // NVIDIA CUDA + OptiX
                   optix-root: $CONFIGSYS_SDK_DIR/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK under ~/sdks/optix/ (several versions can coexist there)
                   optix-max-version: 8 }                                      // warn if the SDK is newer
             ]
         }
+        // `upstream:` on each source binding: where Blender's releases are, so configsys can say the
+        // pinned `ref:` is behind (TUI [R], `configsys versions`) WITHOUT calling it outdated — a new
+        // Blender needs this recipe updated (ref + toolchain), not an upgrade. `pick: highest` because
+        // the feed interleaves LTS point releases (4.5.x) with the newest line (5.x).
         // The source methods' SHELL GLUE: the built editor first on PATH (ahead of a distro
         // /usr/bin/blender) + `blender-python` for the matching bpy interpreter. Each source binding
         // `suggests:` it, so it attaches only while a source method is blender's install method — and
