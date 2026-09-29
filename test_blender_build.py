@@ -102,3 +102,17 @@ def test_binding_gpu_overrides_the_preset(drivers):
     assert drivers['blender-cuda'](r)._gpu_backends(_rc(gpu=['hip'])) == ['hip']
     # aliases still expand (nvidia -> cuda+optix)
     assert drivers['blender-build'](r)._gpu_backends(_rc(gpu=['nvidia'])) == ['cuda', 'optix']
+
+
+def test_cuda_root_list_picks_the_first_with_nvcc(drivers, tmp_path):
+    # the same toolkit lands in different dirs per distro (NVIDIA's repo /usr/local/cuda-12.6, Arch
+    # /opt/cuda): cuda-root may list candidates; the first holding bin/nvcc wins, else the first
+    a, b = tmp_path / 'cuda-12.6', tmp_path / 'opt-cuda'
+    (b / 'bin').mkdir(parents=True)
+    (b / 'bin' / 'nvcc').write_text('#!/bin/sh\n')
+    (b / 'bin' / 'nvcc').chmod(0o755)
+    drv = drivers.get('blender-cuda')(Runner(pretend=False))
+    assert drv._cuda_root(_rc(**{'cuda-root': [str(a), str(b)]})) == str(b)
+    assert drv._cuda_root(_rc(**{'cuda-root': [str(a)]})) == str(a)        # none found -> the first
+    assert drv._cuda_root(_rc(**{'cuda-root': str(b)})) == str(b)          # a plain string still works
+    assert drv._cuda_root(_rc()) is None
