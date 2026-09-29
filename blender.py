@@ -262,8 +262,11 @@ class BlenderBuild(Driver):
         # the same binding's `requires:` (so resolution installs it); we verify here and fail
         # loud rather than quietly dropping to a CPU-only build. (Under --pretend every probe
         # reports ok, so this never spuriously blocks a dry run.)
+        cuda_root = rc.fields.get('cuda-root')
         for b in backends:
             probe, sdk = _GPU_PROBE[b]
+            if cuda_root and b in ('cuda', 'optix'):  # a pinned toolkit: probe ITS nvcc, not PATH's
+                probe = f'test -x {shlex.quote(str(Path(str(cuda_root)).expanduser()))}/bin/nvcc'
             if not self.runner.run(probe).ok:
                 return Result.fail(
                     f"blender-build: gpu {b!r} requested but its toolchain is missing — add "
@@ -280,6 +283,14 @@ class BlenderBuild(Driver):
         d = shlex.quote(str(self._build_dir(rc)))
         target = shlex.quote(rc.fields.get('target') or 'both')
         env = f'GPU_CMAKE={shlex.quote(gpu_cmake)} ' if gpu_cmake else ''
+        # per-version toolchain, from the binding: the compilers (`cc:`/`cxx:` — e.g. Blender 5.x needs
+        # gcc >= 14) and the CUDA toolkit root (`cuda-root:` — pin the version-matched toolkit instead
+        # of whatever nvcc is first on PATH; a distro CUDA 11.5 at /usr/bin/nvcc is common)
+        for field, var in (('cc', 'CC_OVERRIDE'), ('cxx', 'CXX_OVERRIDE'), ('cuda-root', 'CUDA_ROOT')):
+            val = rc.fields.get(field)
+            if val:
+                val = str(Path(str(val)).expanduser()) if field == 'cuda-root' else str(val)
+                env += f'{var}={shlex.quote(val)} '
         # build-blender.sh runs `sudo apt`/install_linux_packages.py for build deps; capture=False
         # streams it through the tee, where the child owns its own pty as controlling terminal, so
         # that internal sudo prompts cleanly (no dual-reader deadlock) and Ctrl-C reaches the build.

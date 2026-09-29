@@ -1,62 +1,92 @@
 {
-    // From-source Blender (editor + a matching `bpy` module), ADDED as pinnable install methods on
-    // base configsys's `blender`. Base's native package stays the DEFAULT — nothing auto-builds.
-    // You choose a GPU flavor by PINNING its method (control over automation):
+    // From-source Blender (editor + a matching `bpy` module), one component PER BLENDER VERSION —
+    // `blender-4.3`, `blender-5.2` — side by side (the python3.11/3.12 and jdk-17/21 pattern). Each
+    // provides the `blender` capability at its version and is `never-auto`: base configsys's
+    // `blender` (distro package / flatpak) stays what `install blender` gets; a source build is one
+    // you PICK by name. Pick one or both (separate build dirs, so both can be installed at once):
     //
-    //   configsys pin blender blender-cuda     # then `install blender` builds Cycles with CUDA
-    //   configsys pin blender blender-optix    # CUDA + OptiX (needs the EULA-gated SDK, see below)
-    //   configsys pin blender blender-hip      # AMD ROCm/HIP
-    //   configsys pin blender blender-build    # plain CPU build
-    //   configsys pin blender native           # back to the distro package
+    //   configsys picks add blender-5.2              # (or tick it in the Profiles screen)
+    //   configsys pin set blender-5.2 blender-optix  # choose its GPU flavor
+    //   configsys install blender-5.2
     //
-    // Each flavor is its OWN `via:` (a thin subclass of the one build driver, presetting the
-    // backend). The binding names the SDK that flavor needs in `requires:` (from base routes.hu),
-    // so pinning it makes the toolkit install itself; a flavor you never pin drags in nothing. The
-    // driver maps the backend to Cycles CMake flags and refuses to build if a toolchain is missing.
+    // A new Blender release is a NEW COMPONENT here (a new recipe: ref + toolchain), never an upgrade
+    // of an old one — each version's `ref:` is pinned, and `upstream:` makes configsys say so ([R]).
     //
-    // The GPU flavors carry a `when:` on the vendor they need (the shared `gpu` facet), so the
-    // Components screen only offers the ones valid on THIS machine (CUDA/OptiX on nvidia, HIP on
-    // amd, oneAPI when you set `facets.gpu intel`); the CPU build is always offered. Profiles shows
-    // them all, for authoring across machines. `configsys where blender` lists the methods valid here.
+    // Flavors: each GPU flavor is its OWN `via:` (a thin subclass of the one build driver, presetting
+    // the backend); the binding names the SDK that flavor needs in `requires:` (from base routes.hu),
+    // so pinning it makes the toolkit install itself. The GPU flavors carry a `when:` on the vendor
+    // they need (the shared `gpu` facet), so the Components screen only offers the ones valid on THIS
+    // machine (CUDA/OptiX on nvidia, HIP on amd, oneAPI when you set `facets.gpu intel`).
+    //
+    // `upstream:` on each source binding names where Blender's releases are, so configsys reports a
+    // pinned ref behind upstream (TUI [R], `configsys versions`) WITHOUT calling it outdated.
+    // `pick: highest` because the feed interleaves LTS point releases (4.5.x) with the newest (5.x).
     components: {
-        blender: {
-            // Every source variant needs gcc-11 — Blender 4.3's REFERENCE (known-good) compiler.
-            // Requiring it guarantees the recipe's "fall back off a too-new default g++" step has the
-            // right compiler to reach for, instead of hoping it's installed. gcc-11 is parallel-
-            // installable on debian/ubuntu (apt, ubuntu-toolchain-r PPA) and on rhel/EL (the
-            // gcc-toolset-11 SCL under /opt/rh) — both purely additive, no toolchain rollback.
-            // NOT on FEDORA, though: its repos ship only the latest gcc (14/15) with no parallel
-            // gcc11/gcc12 compat package, and no clean COPR provides one at /usr/bin/gcc-11
-            // (slaanesh/cuda-gcc is CUDA-host-specific — /usr/bin/cuda-gcc, and tracks gcc-13, too new
-            // for OpenColorIO's cstdint). So on fedora this is an honest unmet-require at resolve/check
-            // time, not a silent mid-build failure on a too-new gcc — until fedora packages a gcc <=12
-            // or we add a from-source gcc-11 build. The nvcc host-compiler cap is handled separately
-            // in the recipe.
+        blender-4.3: { attrs: [ GUI app FOSS copyleft ]
+            description: "Blender 4.3 built from source (editor + matching `bpy`) — pick a GPU flavor by pinning its method."
+            provides: { blender: 4.3 }  standing: never-auto
+            // Every 4.3 flavor needs gcc-11 — Blender 4.3's REFERENCE (known-good) compiler; the recipe
+            // falls back to it off a too-new default g++ (4.3's bundled OpenColorIO/nanovdb don't build
+            // with gcc >= 13). gcc-11 is parallel-installable on debian/ubuntu (ubuntu-toolchain-r PPA)
+            // and on EL (gcc-toolset-11); NOT on Fedora (no parallel gcc <= 12) — an honest unmet
+            // require there. The nvcc host-compiler cap is handled separately in the recipe. Builds in
+            // `blender-4.3-git` (each version in `blender-<ver>-git`). A tree built before the per-version
+            // dirs lives in `blender-git`: rename it (and repair its bpy-venv — see the README) to keep it.
             install: [
-                { via: blender-build  ref: v4.3.2  dir: blender-git  target: both  requires: [ gcc-11 ]  suggests: blender-source-glue
+                { via: blender-build  ref: v4.3.2  dir: blender-4.3-git  target: both  requires: [ gcc-11 ]  suggests: blender-source-glue
                   upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }   // CPU — valid anywhere
-                { via: blender-cuda   ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue
+                { via: blender-cuda   ref: v4.3.2  dir: blender-4.3-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue
                   upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }   // NVIDIA CUDA
-                { via: blender-hip    ref: v4.3.2  dir: blender-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ]  suggests: blender-source-glue
+                { via: blender-hip    ref: v4.3.2  dir: blender-4.3-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-11 ]  suggests: blender-source-glue
                   upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }       // AMD HIP
-                { via: blender-oneapi ref: v4.3.2  dir: blender-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ]  suggests: blender-source-glue
+                { via: blender-oneapi ref: v4.3.2  dir: blender-4.3-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-11 ]  suggests: blender-source-glue
                   upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }  // Intel oneAPI (set facets.gpu intel)
-                { via: blender-optix  ref: v4.3.2  dir: blender-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue
+                { via: blender-optix  ref: v4.3.2  dir: blender-4.3-git  target: both  when: "gpu:nvidia"  requires: [ cuda-toolkit, gcc-11 ]  suggests: blender-source-glue
                   upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest }     // NVIDIA CUDA + OptiX
                   optix-root: $CONFIGSYS_SDK_DIR/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // Blender 4.3 wants OptiX 8.x; unpack the EULA SDK under ~/sdks/optix/ (several versions can coexist there)
                   optix-max-version: 8 }                                      // warn if the SDK is newer
             ]
         }
-        // `upstream:` on each source binding: where Blender's releases are, so configsys can say the
-        // pinned `ref:` is behind (TUI [R], `configsys versions`) WITHOUT calling it outdated — a new
-        // Blender needs this recipe updated (ref + toolchain), not an upgrade. `pick: highest` because
-        // the feed interleaves LTS point releases (4.5.x) with the newest line (5.x).
-        // The source methods' SHELL GLUE: the built editor first on PATH (ahead of a distro
-        // /usr/bin/blender) + `blender-python` for the matching bpy interpreter. Each source binding
-        // `suggests:` it, so it attaches only while a source method is blender's install method — and
-        // configsys removes it when you switch method (`pin blender native`) or remove blender.
-        // Snippets ship in this plugin's glue/shell/<shell>/blender-source.* (bash/zsh/fish/nu/elvish).
-        blender-source-glue: { description: "From-source Blender on PATH (+ `blender-python` for its bpy)."
+        blender-5.2: { attrs: [ GUI app FOSS copyleft ]
+            description: "Blender 5.2 built from source (editor + matching `bpy`) — pick a GPU flavor by pinning its method."
+            provides: { blender: 5.2 }  standing: never-auto
+            // Blender 5.2's build floors (from its own CMake): GCC >= 14 (Clang >= 17), bundled Python
+            // 3.13 (bpy's ABI — the recipe builds bpy-venv from Blender's own interpreter), OptiX >= 8.0,
+            // release CUDA 12.8. So: require the core `gcc-14` and pass it as the compiler (cc/cxx);
+            // CUDA/OptiX require CUDA 12.8 (`cuda-toolkit: ">=12.8,<13"` selects core's
+            // cuda-toolkit-12.8): 12.6's nvcc rejects gcc-14 as a host compiler ("gcc versions later
+            // than 13 are not supported") and can't target sm_120 (in 5.2's default arch list), and
+            // CUDA 13 dropped sm_50-sm_72, which 5.2 still builds. `cuda-root:` pins THAT toolkit (not
+            // whatever nvcc is first on PATH). Builds in `blender-5.2-git`, beside 4.3's `blender-4.3-git`.
+            // HIP/oneAPI floors for 5.2 are not yet verified against rocm-hip / intel-oneapi-basekit.
+            install: [
+                { via: blender-build  ref: v5.2.2  dir: blender-5.2-git  target: both  requires: [ gcc-14 ]  suggests: blender-source-glue
+                  cc: gcc-14  cxx: g++-14
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }   // CPU — valid anywhere
+                { via: blender-cuda   ref: v5.2.2  dir: blender-5.2-git  target: both  when: "gpu:nvidia"  requires: [ { cuda-toolkit: ">=12.8,<13" }, gcc-14 ]  suggests: blender-source-glue
+                  cc: gcc-14  cxx: g++-14  cuda-root: /usr/local/cuda-12.8
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }   // NVIDIA CUDA
+                { via: blender-hip    ref: v5.2.2  dir: blender-5.2-git  target: both  when: "gpu:amd"     requires: [ rocm-hip, gcc-14 ]  suggests: blender-source-glue
+                  cc: gcc-14  cxx: g++-14
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }       // AMD HIP
+                { via: blender-oneapi ref: v5.2.2  dir: blender-5.2-git  target: both  when: "gpu:intel"   requires: [ intel-oneapi-basekit, gcc-14 ]  suggests: blender-source-glue
+                  cc: gcc-14  cxx: g++-14
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest } }  // Intel oneAPI (set facets.gpu intel)
+                { via: blender-optix  ref: v5.2.2  dir: blender-5.2-git  target: both  when: "gpu:nvidia"  requires: [ { cuda-toolkit: ">=12.8,<13" }, gcc-14 ]  suggests: blender-source-glue
+                  cc: gcc-14  cxx: g++-14  cuda-root: /usr/local/cuda-12.8
+                  upstream: { github: blender/blender  strip-v: true  tag-re: "^v([0-9]+[.][0-9]+[.][0-9]+)$"  pick: highest }     // NVIDIA CUDA + OptiX
+                  optix-root: $CONFIGSYS_SDK_DIR/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64   // 5.2's floor is OptiX 8.0 (the same SDK as 4.3)
+                  optix-max-version: 8 }                                      // conservative: OptiX 9 on 5.2 not yet verified
+            ]
+        }
+        // The source builds' SHELL GLUE (one snippet for every version): `blender-4.3`/`blender-5.2`
+        // (+ `blender-python-4.3`/`-5.2` for the matching bpy) for each version that's built, and plain
+        // `blender`/`blender-python` -> the NEWEST built version, first on PATH (ahead of a distro
+        // /usr/bin/blender); set CONFIGSYS_BLENDER=4.3 to make plain `blender` an older one. Each source
+        // binding `suggests:` it, so it attaches only while a source method is installed — and
+        // configsys removes it with the last one (method switch / remove). Snippets: this plugin's
+        // glue/shell/<shell>/blender-source.* (bash/zsh/fish/nu/elvish).
+        blender-source-glue: { description: "From-source Blender on PATH: `blender` (newest built) + `blender-<ver>`, and `blender-python` for its bpy."
             install: [ { via: glue  requires: shell-glue  glue: blender-source } ]
         }
     }

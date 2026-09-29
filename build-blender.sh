@@ -13,8 +13,13 @@ TARGET="${3:-both}"                            # editor | bpy | both
 SRC="$ROOT/blender"
 
 # --- knobs -----------------------------------------------------------------
-CC_OVERRIDE=""            # e.g. "gcc-14"  (empty = system default compiler)
-CXX_OVERRIDE=""          # e.g. "g++-14"
+# The binding's `cc:`/`cxx:` arrive here (a Blender version's compiler, e.g. gcc-14 for 5.x); empty =
+# the default below (Blender 4.3's fallback off a too-new g++). Set them here to force one.
+CC_OVERRIDE="${CC_OVERRIDE:-}"     # e.g. "gcc-14"
+CXX_OVERRIDE="${CXX_OVERRIDE:-}"   # e.g. "g++-14"
+# The binding's `cuda-root:` (e.g. /usr/local/cuda-12.8): the CUDA toolkit to build kernels with. Empty =
+# whatever nvcc CMake finds on PATH (beware a stale distro /usr/bin/nvcc).
+CUDA_ROOT="${CUDA_ROOT:-}"
 
 # bpy install target. bpy is an ABI-locked extension for Blender's OWN bundled CPython (e.g. the
 #   cp311 wheel imports ONLY under Python 3.11) — the system python is usually a different version,
@@ -34,6 +39,8 @@ GPU_CMAKE="${GPU_CMAKE:-}"   # empty = CPU-only
 #   * GCC >= 14 rejects nanovdb's template bodies (-Wtemplate-body).
 #   * GCC >= 13 dropped the transitive <cstdint> include, so Blender 4.3's bundled OpenColorIO.h
 #     (`enum ... : uint8_t`, no #include <cstdint>) fails with "'uint8_t' was not declared".
+# (This is Blender 4.3's constraint: its bindings leave cc/cxx unset. Blender 5.x NEEDS GCC >= 14 —
+# its bindings pass cc: gcc-14 / cxx: g++-14, which skips this fallback.)
 # Blender 4.3's reference compiler is GCC 11. So if no compiler is forced and the DEFAULT g++ is
 # >= 13 (e.g. update-alternatives points cc/g++ at gcc-15), fall back to the newest installed
 # g++ <= 12. Override via CC/CXX_OVERRIDE (a >= 13 override will hit the OpenColorIO error).
@@ -59,8 +66,16 @@ fi
 # the toolkit's host_config.h so it tracks whatever CUDA is installed.
 case " $GPU_CMAKE " in
     *CUDA*|*OPTIX*)
+        if [ -n "$CUDA_ROOT" ]; then
+            # a pinned toolkit: CMake must use ITS nvcc, and the host-compiler cap is ITS cap
+            [ -x "$CUDA_ROOT/bin/nvcc" ] || { echo "build-blender: CUDA_ROOT=$CUDA_ROOT has no bin/nvcc" >&2; exit 1; }
+            export PATH="$CUDA_ROOT/bin:$PATH"
+            GPU_CMAKE="$GPU_CMAKE -D CUDA_TOOLKIT_ROOT_DIR=$CUDA_ROOT -D CUDA_NVCC_EXECUTABLE=$CUDA_ROOT/bin/nvcc"
+            echo "build-blender: CUDA toolkit pinned to $CUDA_ROOT ($("$CUDA_ROOT/bin/nvcc" --version | tail -1))"
+        fi
         _cuda_max=""
-        for _hc in /usr/include/crt/host_config.h /usr/local/cuda*/include/crt/host_config.h \
+        for _hc in ${CUDA_ROOT:+"$CUDA_ROOT/include/crt/host_config.h"} \
+                   /usr/include/crt/host_config.h /usr/local/cuda*/include/crt/host_config.h \
                    "$(command -v nvcc 2>/dev/null | xargs -r dirname 2>/dev/null)/../include/crt/host_config.h"; do
             if [ -f "$_hc" ]; then
                 _cuda_max=$(grep -oE 'later than [0-9]+' "$_hc" 2>/dev/null | grep -oE '[0-9]+' | head -1)

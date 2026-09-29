@@ -1,9 +1,11 @@
 # Scope: moving the recipe from Blender 4.3.2 to 5.2.x
 
-**Status:** scoped, not started (2026-09-28). configsys now *shows* the gap: the source methods
-declare `upstream:`, so `configsys versions blender`, `inspect`, and the TUI (`[R]` in LATEST + the
-detail line) say "recipe pins 4.3.2; upstream is 5.2.2 — a new version needs a NEW RECIPE". This doc
-is the plan for actually closing it.
+**Status:** IMPLEMENTED (2026-09-28/29) as a side-by-side `blender-5.2` component beside
+`blender-4.3` (see "What was done" at the end). Original scope follows.
+
+configsys *shows* the gap: the source methods declare `upstream:`, so `configsys versions`,
+`inspect`, and the TUI (`[R]` in LATEST + the detail line) say "recipe pins 4.3.2; upstream is 5.2.2 —
+a new version needs a NEW RECIPE".
 
 This is **not an upgrade** in configsys's sense. A pinned `ref:` bump changes the compiler, the Python
 ABI of `bpy`, and the GPU SDK floors — each a recipe/route change that must be validated by a real
@@ -69,3 +71,40 @@ build, not a version-string edit.
 
 Roughly: half a day of recipe/route edits and research on items 2/4/5, plus 2–3 long real builds
 to validate. Don't start it inside other work — do it as its own change set.
+
+## What was done (2026-09-28/29)
+
+**Side by side, not a replacement.** The single `blender` component's source methods became two
+versioned components — `blender-4.3` (unchanged recipe) and `blender-5.2` — each `provides: { blender:
+<ver> }` + `never-auto` (the python3.X / jdk-N pattern), each building in its own `blender-<ver>-git`.
+Pick a version; pin its GPU flavor. A future Blender is another component, never an upgrade.
+
+**Toolchain as core dependencies.** 5.2 requires core `gcc-14` and passes it explicitly (`cc:`/`cxx:`
+binding fields → the recipe's CC/CXX_OVERRIDE). Its CUDA/OptiX methods require `cuda-toolkit:
+">=12.8,<13"`, which selects the new core **`cuda-toolkit-12.8`**, and pin it via `cuda-root:`
+(`/usr/local/cuda-12.8`; the recipe then uses THAT nvcc and its host-compiler cap).
+
+**Why CUDA 12.8 (tested on the dev machine, RTX 2070 / driver 580):** CUDA 12.6's nvcc refuses gcc-14
+as a host compiler (`host_config.h: gcc versions later than 13 are not supported`), and forcing it
+(`-allow-unsupported-compiler`) fails compiling libstdc++-14 headers; 12.6 also can't target `sm_120`,
+in 5.2's default arch list. CUDA 13 dropped sm_50–sm_72, which 5.2 still builds — hence `<13`. 5.2
+does NOT use cuDNN (its denoiser is OpenImageDenoise 2.5). Note: a distro `/usr/bin/nvcc` (CUDA 11.5 on
+Ubuntu 22.04) sits first on PATH — `cuda-root:` keeps the build off it.
+
+**Glue.** One `blender-source-glue` for all versions: `blender-<ver>` / `blender-python-<ver>` per built
+version; plain `blender` / `blender-python` = the newest (`CONFIGSYS_BLENDER=4.3` to override). Reads the
+glue-locations cache (the machine's PICKS — so pick the version). Tested in bash/zsh/fish/elvish.
+
+**Validation — Ubuntu 24.04 container, CPU flavor (`blender-build`), via `configsys install
+blender-5.2`:** configured with GNU 14.3.0; editor built (~2 h on 8 cores) and runs (`Blender 5.2.2
+LTS`, embedded Python 3.13.13); bpy built and installed into `bpy-venv` on Blender's bundled Python
+3.13.13 (`import bpy` → 5.2.2 LTS, default scene loads); a rerun after an interruption RESUMED (caches
+kept, no wipe); `configsys versions blender-5.2` → installed v5.2.2; the installed bash glue put the
+5.2 editor first on PATH and `blender-python` imported bpy.
+
+**Not yet validated:** the OptiX/CUDA flavors on real hardware (needs sudo on the dev machine: CUDA
+12.8 install + build deps); HIP/oneAPI 5.2 floors; OptiX 9 acceptance (capped at 8).
+
+**Migration** (README): the old `blender` pin errors in `check`; rename `blender-git` →
+`blender-4.3-git`, recreate its `bpy-venv` from Blender's bundled Python + the wheel left in the tree
+(tested: bpy 4.3.2 imports), re-pin on `blender-4.3`, reinstall the glue — no rebuild.

@@ -3,24 +3,49 @@
 A [configsys](https://github.com/spacemeat/configsys) **code plugin** that builds Blender
 (editor + the `bpy` Python module) from source, so `import bpy` matches the editor.
 
-Base's native `blender` stays the **default** — nothing auto-builds. Each GPU flavor is a **pinnable
-install method** (its own `via:`) on the one `blender` component, so you keep control over which one
-runs:
+Base's native `blender` stays what `install blender` gets — nothing auto-builds. Each **Blender
+version** is its own component — `blender-4.3`, `blender-5.2` — side by side (separate build dirs, so
+both can be installed at once: `blender-4.3-git`, `blender-5.2-git`), and each **GPU flavor** is a pinnable install method on it:
 
 ```console
-$ configsys where blender          # lists the methods: native (default), blender-build (CPU),
-                                    #   blender-cuda, blender-optix, blender-hip, blender-oneapi
-$ configsys pin blender blender-cuda
-$ configsys install blender        # builds Cycles with CUDA (pulls cuda-toolkit)
+$ configsys picks add blender-5.2              # or tick it in the TUI Profiles screen
+$ configsys where blender-5.2                  # the flavors: blender-build (CPU, default), blender-cuda,
+                                               #   blender-optix, blender-hip, blender-oneapi
+$ configsys pin set blender-5.2 blender-optix
+$ configsys install blender-5.2                # pulls that version's toolchain (gcc-14, CUDA 12.8)
 ```
 
-Pinning a flavor pulls just that flavor's SDK (named in its binding's `requires:`); an unpinned
-machine drags in nothing. `configsys pin blender native` goes back to the distro package.
+Each version carries its own toolchain as core dependencies — 4.3: `gcc-11` (+ `cuda-toolkit`);
+5.2: `gcc-14` (+ `cuda-toolkit-12.8` for CUDA/OptiX). Pinning a flavor pulls just that flavor's SDK;
+an unpicked version drags in nothing. **A new Blender release is a new component**, not an upgrade:
+each version's `ref:` is pinned, and configsys shows `[R]` (a newer upstream needs a new recipe).
+
+## Migrating from the single `blender` component (plugin < v0.2)
+
+The source methods moved from `blender` to the versioned components, and each version builds in its
+own `blender-<ver>-git` dir. An old method pin on `blender` now errors in `configsys check`
+("pinned to via:'blender-optix', which is not a binding"). To keep an existing 4.3 build (no rebuild):
+
+```console
+$ mv ~/src/blender-git ~/src/blender-4.3-git        # the build dir blender-4.3 now uses
+$ cd ~/src/blender-4.3-git                          # repair the bpy venv (it recorded the old path):
+$ blender/lib/linux_x64/python/bin/python3.11 -m venv --clear --system-site-packages bpy-venv
+$ bpy-venv/bin/pip install --quiet bpy-4.3.2-*.whl  # the wheel the build left here
+$ configsys pin unset blender
+$ configsys picks rm blender && configsys picks add blender-4.3   # (if blender was picked)
+$ configsys pin set blender-4.3 blender-optix                      # your flavor
+$ configsys install blender-source-glue                            # refresh the shell glue
+```
+
+Why the venv step: a venv is not relocatable — its `python` links, `pyvenv.cfg` and `pip` shebangs
+hold absolute paths. The built editor itself runs fine after the move, and a later REBUILD of a moved
+tree is handled by the recipe (it notices a build dir configured for another path and reconfigures).
+`configsys versions blender-4.3` should then read `installed`.
 
 - `blender.py` — the `blender-build` driver + thin per-flavor subclasses (`blender-cuda`, …), each
   presetting a backend; `gpu:`→CMake mapping + toolchain validation live in the base class.
 - `build-blender.sh` — the build recipe (edit the knobs: compiler, bpy install target).
-- `blender.hu` — the `blender` component: one binding per flavor via.
+- `blender.hu` — the versioned components (`blender-4.3`, `blender-5.2`): one binding per flavor via.
 
 The GPU SDK components a `gpu:` build depends on (`cuda-toolkit`, `rocm-hip`,
 `intel-oneapi-basekit`) live in **base configsys** (`routes.hu`), not this plugin.
@@ -32,11 +57,11 @@ See `docs/PLAN.md` for the decisions and the parked work.
 
 | `via:` | backend preset | `requires:` (SDK, from base) | pin with |
 |---|---|---|---|
-| `blender-build` | none (CPU) | — | `pin blender blender-build` |
-| `blender-cuda` | `cuda` | `cuda-toolkit` | `pin blender blender-cuda` |
-| `blender-optix` | `cuda` + `optix` | `cuda-toolkit` (+ `optix-root:`) | `pin blender blender-optix` |
-| `blender-hip` | `hip` | `rocm-hip` | `pin blender blender-hip` |
-| `blender-oneapi` | `oneapi` | `intel-oneapi-basekit` | `pin blender blender-oneapi` |
+| `blender-build` | none (CPU) | — | `pin set blender-<ver> blender-build` |
+| `blender-cuda` | `cuda` | `cuda-toolkit` (5.2: `>=12.8,<13`) | `pin set blender-<ver> blender-cuda` |
+| `blender-optix` | `cuda` + `optix` | `cuda-toolkit` (5.2: `>=12.8,<13`) (+ `optix-root:`) | `pin set blender-<ver> blender-optix` |
+| `blender-hip` | `hip` | `rocm-hip` | `pin set blender-<ver> blender-hip` |
+| `blender-oneapi` | `oneapi` | `intel-oneapi-basekit` | `pin set blender-<ver> blender-oneapi` |
 
 Each via is a thin subclass that presets its backend, so the flavor is chosen by **which method you
 pin** — no editing. The GPU methods carry a `when:` on the vendor they need (`gpu:nvidia` for
@@ -46,8 +71,10 @@ authoring across machines). The base source-build fields apply to every binding:
 
 | field | values | default | meaning |
 |---|---|---|---|
-| `ref` | git tag/branch, e.g. `v4.3.2` | (default branch) | version to build; pin it to match your editor |
-| `dir` | path (scope-honored) | `blender-git` | build-tree parent — bare-relative → `~/<dir>` (user) or `/opt/<dir>` (system) |
+| `ref` | git tag/branch, e.g. `v5.2.2` | (default branch) | version to build — fixed per versioned component |
+| `cc` / `cxx` | compiler commands, e.g. `gcc-14` / `g++-14` | (recipe default) | the version's compiler (5.x needs GCC >= 14) |
+| `cuda-root` | a CUDA toolkit dir, e.g. `/usr/local/cuda-12.8` | (nvcc on PATH) | pin the version-matched CUDA (not a stale `/usr/bin/nvcc`) |
+| `dir` | path (scope-honored) | `blender-git` | build-tree parent — bare-relative → `$CONFIGSYS_SRC_DIR/<dir>`; each version uses `blender-<ver>-git` |
 | `target` | `editor` \| `bpy` \| `both` | `both` | what to build |
 | `gpu` | list of backend tokens / vendor aliases | (the via's preset) | **override** the backend set on a single binding (see below) |
 | `requires` | SDK component name(s) | — | **must list the SDK for the backend** (auto-installed by resolution) |
@@ -55,16 +82,17 @@ authoring across machines). The base source-build fields apply to every binding:
 ## Shell glue (`blender-source-glue`)
 
 Every source method `suggests:` **`blender-source-glue`**, which ships in this plugin
-(`glue/shell/<shell>/blender-source.*` — bash, zsh, fish, nu, elvish). In a new shell it:
+(`glue/shell/<shell>/blender-source.*` — bash, zsh, fish, nu, elvish). In a new shell, for every
+version that's BUILT:
 
-- puts the built editor (`<build>/build_linux/bin`) **first** on `PATH`, ahead of a distro
-  `/usr/bin/blender`, so `blender` runs your build;
-- defines **`blender-python`** — the interpreter the `bpy` module was built against (the build's
-  `bpy-venv`), so `blender-python -c "import bpy"` matches the editor.
+- **`blender-<ver>`** (`blender-5.2`, `blender-4.3`) runs that build, and **`blender-python-<ver>`** the
+  interpreter its `bpy` was built against (the build's `bpy-venv`);
+- plain **`blender`** / **`blender-python`** are the NEWEST built version — its build dir goes first on
+  `PATH`, ahead of a distro `/usr/bin/blender`. Set **`CONFIGSYS_BLENDER=4.3`** to make them an older one.
 
-It's a binding-level suggestion, so it's attached only while a source method is `blender`'s install
-method. Switching away (`configsys pin set blender native`, then `configsys install blender`) or
-`configsys remove blender` removes it along with the build.
+It's a binding-level suggestion, so it's attached only while a source method is installed; configsys
+removes it with the last one (a method switch, or `configsys remove blender-<ver>`). Locations come
+from configsys's glue-locations cache, so it adds ~no shell-startup time.
 
 ## GPU backends (the `gpu:` override + `requires:`)
 
@@ -97,7 +125,7 @@ Example NVIDIA binding:
 
 ```
 blender: { install: [
-    { via: blender-build  ref: v4.3.2  dir: blender-git  target: both
+    { via: blender-build  ref: v4.3.2  dir: blender-4.3-git  target: both
       gpu: [ cuda, optix ]  requires: [ cuda-toolkit ]
       optix-root: ~/optix/NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64  optix-max-version: 8 }
 ] }
@@ -128,4 +156,4 @@ don't hand-edit it.
 one it didn't is best-effort probed from compiled Cycles kernels (`*.optixir`→optix, `*.cubin`→cuda,
 `*.hipfb`→hip). So `configsys versions blender` names which flavor is built, and — even unpinned —
 `configsys inspect` surfaces a source build as *"also present"*. Built Blender somewhere nonstandard?
-Point configsys at it: `locations: { blender: /path/to/blender-git }` in your config.
+Point configsys at it: `locations: { blender-4.3: /path/to/blender-4.3-git }` in your config.
