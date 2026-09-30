@@ -87,8 +87,19 @@ version that's BUILT:
 
 - **`blender-<ver>`** (`blender-5.2`, `blender-4.3`) runs that build, and **`blender-python-<ver>`** the
   interpreter its `bpy` was built against (the build's `bpy-venv`);
-- plain **`blender`** / **`blender-python`** are the NEWEST built version — its build dir goes first on
-  `PATH`, ahead of a distro `/usr/bin/blender`. Set **`CONFIGSYS_BLENDER=4.3`** to make them an older one.
+- plain **`blender`** / **`blender-python`** launch the version **`BLENDER_VERSION`** names, read at
+  launch time — the NEWEST built one when it's unset — and say so first, on stderr:
+
+  ```console
+  $ blender
+  blender: launching 5.2 — built: 5.2 4.3 (BLENDER_VERSION=<ver> picks another)
+  $ BLENDER_VERSION=4.3 blender               # just this once
+  $ export BLENDER_VERSION=4.3                # this shell, from now on
+  ```
+
+  (A `BLENDER_VERSION` that isn't built errors, listing what is.) These are shell functions, so scripts
+  don't see them: for scripts, the newest build's dir is also first on `PATH` (ahead of a distro
+  `/usr/bin/blender`), or call `<build>/build_linux/bin/blender` directly.
 
 It's a binding-level suggestion, so it's attached only while a source method is installed; configsys
 removes it with the last one (a method switch, or `configsys remove blender-<ver>`). Locations come

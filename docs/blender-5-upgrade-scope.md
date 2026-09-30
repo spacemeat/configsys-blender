@@ -92,7 +92,8 @@ does NOT use cuDNN (its denoiser is OpenImageDenoise 2.5). Note: a distro `/usr/
 Ubuntu 22.04) sits first on PATH — `cuda-root:` keeps the build off it.
 
 **Glue.** One `blender-source-glue` for all versions: `blender-<ver>` / `blender-python-<ver>` per built
-version; plain `blender` / `blender-python` = the newest (`CONFIGSYS_BLENDER=4.3` to override). Reads the
+version; plain `blender` / `blender-python` = the version `BLENDER_VERSION` names at launch, else the
+newest (announced on stderr). Reads the
 glue-locations cache (the machine's PICKS — so pick the version). Tested in bash/zsh/fish/elvish.
 
 **Validation — Ubuntu 24.04 container, CPU flavor (`blender-build`), via `configsys install

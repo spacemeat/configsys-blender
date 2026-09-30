@@ -86,12 +86,13 @@
         }
         // The source builds' SHELL GLUE (one snippet for every version): `blender-4.3`/`blender-5.2`
         // (+ `blender-python-4.3`/`-5.2` for the matching bpy) for each version that's built, and plain
-        // `blender`/`blender-python` -> the NEWEST built version, first on PATH (ahead of a distro
-        // /usr/bin/blender); set CONFIGSYS_BLENDER=4.3 to make plain `blender` an older one. Each source
+        // `blender`/`blender-python` -> the version BLENDER_VERSION names, read AT LAUNCH (unset = the
+        // newest built), announced on stderr before it starts; the newest build is also first on PATH
+        // (ahead of a distro /usr/bin/blender) for scripts. Each source
         // binding `suggests:` it, so it attaches only while a source method is installed — and
         // configsys removes it with the last one (method switch / remove). Snippets: this plugin's
         // glue/shell/<shell>/blender-source.* (bash/zsh/fish/nu/elvish).
-        blender-source-glue: { description: "From-source Blender on PATH: `blender` (newest built) + `blender-<ver>`, and `blender-python` for its bpy."
+        blender-source-glue: { description: "From-source Blender: `blender` (BLENDER_VERSION, else the newest built) + `blender-<ver>`, and `blender-python` for its bpy."
             install: [ { via: glue  requires: shell-glue  glue: blender-source } ]
         }
     }
